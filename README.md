@@ -8,3 +8,7 @@ This is an example project to learn how to work with [Colyseus Java Client](http
 [Colyseus](https://colyseus.io/)
 
 <img src="https://github.com/doorbash/agar.io-clone/blob/master/screenshot.png?raw=true" />
+
+## License
+
+MIT
