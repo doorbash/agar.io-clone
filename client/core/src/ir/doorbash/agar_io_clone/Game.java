@@ -102,6 +102,7 @@ public class Game extends ApplicationAdapter {
     private void drawFruits() {
         for (int i = 0; i < numFruits; i++) {
             Fruit fr = fruits[i];
+            if (fr == null) continue;
             if (fr.eaten) continue;
             shapeRenderer.setColor(fr.color);
             shapeRenderer.circle(fr.x, fr.y, 10);
