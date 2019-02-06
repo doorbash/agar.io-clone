@@ -119,7 +119,7 @@ export class PublicRoom extends Room<GameState> {
 
             // check if player eat something
             this.checkIfPlayerIsEatingFruit(player);
-            this.checkIfPlayerIsEatingAnotherPlayer(key,player);
+            this.checkIfPlayerIsEatingAnotherPlayer(key, player);
         });
     }
 
@@ -128,7 +128,7 @@ export class PublicRoom extends Room<GameState> {
             if (fruit.eaten) return;
             if (fruit.x > (player.x - player.radius) &&
                 fruit.y > (player.y - player.radius) &&
-                fruit.x< (player.x + player.radius) &&
+                fruit.x < (player.x + player.radius) &&
                 fruit.y < (player.y + player.radius)) {
                 this.eat(player, fruit);
             }
@@ -139,7 +139,7 @@ export class PublicRoom extends Room<GameState> {
         fruit.eaten = true;
         player.radius += FRUIT_RADIUS / 10;
         var newSpeed = player.speed - FRUIT_RADIUS / 20;
-        if(newSpeed > PLAYER_MIN_SPEED) player.speed = newSpeed;
+        if (newSpeed > PLAYER_MIN_SPEED) player.speed = newSpeed;
         console.log('yum yum yummm');
         this.generateFruit();
     }
@@ -153,15 +153,11 @@ export class PublicRoom extends Room<GameState> {
         this.state.fruits.push(fr);
     }
 
-    checkIfPlayerIsEatingAnotherPlayer(clientId,player) {
+    checkIfPlayerIsEatingAnotherPlayer(clientId, player) {
         Object.keys(this.state.players).forEach(key => {
-            if(key == clientId) return;
+            if (key == clientId) return;
             var p = this.state.players[key];
-            if (p.radius < player.radius &&
-                p.x > (player.x - player.radius) &&
-                p.y > (player.y - player.radius) &&
-                p.x < (player.x + player.radius) &&
-                p.y < (player.y + player.radius)) {
+            if (p.radius < player.radius && (Math.pow(p.x - player.x, 2) + Math.pow(p.y - player.y, 2)) < Math.pow(player.radius + p.radius, 2)) {
                 this.eatPlayer(player, p);
             }
         });
@@ -170,7 +166,7 @@ export class PublicRoom extends Room<GameState> {
     eatPlayer(player, player2) {
         player.radius += player2.radius / 10;
         var newSpeed = player.speed - player2.radius / 20;
-        if(newSpeed > PLAYER_MIN_SPEED) player.speed = newSpeed;
+        if (newSpeed > PLAYER_MIN_SPEED) player.speed = newSpeed;
         console.log('oh nooooo');
         player2.x = Math.floor(Math.random() * this.state.mapSize.width);
         player2.y = Math.floor(Math.random() * this.state.mapSize.height);
