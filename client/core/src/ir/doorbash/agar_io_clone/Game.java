@@ -34,7 +34,6 @@ public class Game extends ApplicationAdapter {
         public float x;
         public float y;
         public Color color;
-        boolean eaten;
     }
 
     private ShapeRenderer shapeRenderer;
@@ -46,8 +45,7 @@ public class Game extends ApplicationAdapter {
     Room room;
     double lastAngle = -1000;
     HashMap<String, Player> players = new HashMap<>();
-    Fruit[] fruits = new Fruit[10000];
-    int numFruits = 0;
+    final LinkedHashMap<String, Fruit> fruits = new LinkedHashMap<>();
     int mapWidth;
     int mapHeight;
 
@@ -103,18 +101,19 @@ public class Game extends ApplicationAdapter {
         shapeRenderer.end();
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
         shapeRenderer.setColor(Color.RED);
-        shapeRenderer.rect(0,0,mapWidth,mapHeight);
+        shapeRenderer.rect(0, 0, mapWidth, mapHeight);
         shapeRenderer.end();
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
     }
 
     private void drawFruits() {
-        for (int i = 0; i < numFruits; i++) {
-            Fruit fr = fruits[i];
-            if (fr == null) continue;
-            if (fr.eaten) continue;
-            shapeRenderer.setColor(fr.color);
-            shapeRenderer.circle(fr.x, fr.y, 10);
+        synchronized (fruits) {
+            for (String fruitId : fruits.keySet()) {
+                Fruit fr = fruits.get(fruitId);
+                if (fr == null) continue;
+                shapeRenderer.setColor(fr.color);
+                shapeRenderer.circle(fr.x, fr.y, 10);
+            }
         }
     }
 
@@ -255,27 +254,22 @@ public class Game extends ApplicationAdapter {
                             else color = (Integer) data.get("color");
                             fruit.color = new Color(color);
 
-                            fruit.eaten = (boolean) data.get("eaten");
-
-                            fruits[Integer.parseInt(dataChange.path.get("id"))] = fruit;
-                            numFruits++;
+                            synchronized (fruits) {
+                                fruits.put(dataChange.path.get("id"), fruit);
+                            }
+                        } else if (dataChange.operation.equals("remove")) {
+                            synchronized (fruits) {
+                                fruits.remove(dataChange.path.get("id"));
+                            }
                         }
-                    }
-                });
-                room.addPatchListener("fruits/:id/:attribute", new PatchListenerCallback() {
-                    @Override
-                    protected void callback(DataChange dataChange) {
-                        if (!dataChange.operation.equals("replace")) return;
-                        if (!dataChange.path.get("attribute").equals("eaten")) return;
-                        fruits[Integer.parseInt(dataChange.path.get("id"))].eaten = true;
                     }
                 });
                 room.addPatchListener("mapSize/:id", new PatchListenerCallback() {
                     @Override
                     protected void callback(DataChange dataChange) {
-                        if(dataChange.path.get("id").equals("width")) {
+                        if (dataChange.path.get("id").equals("width")) {
                             mapWidth = (int) dataChange.value;
-                        } else if(dataChange.path.get("id").equals("height")) {
+                        } else if (dataChange.path.get("id").equals("height")) {
                             mapHeight = (int) dataChange.value;
                         }
                     }

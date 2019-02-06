@@ -15,13 +15,12 @@ const FRUIT_COLORS: number[] = [
 ];
 
 const WORLD_UPDATE_INTERVAL = 16; // ms
-
 const INIT_FRUITS = 50;
 const FRUIT_RADIUS = 10;
-
 const PLAYER_MIN_SPEED = 40;
 const PLAYER_INIT_SPEED = 120;
 const PLAYER_INIT_RADIUS = 40;
+var fruitId = 0;
 
 export class Player {
     x: number;
@@ -36,7 +35,6 @@ export class Fruit {
     x: number;
     y: number;
     color: number;
-    eaten: boolean;
 }
 
 export class GameState {
@@ -44,7 +42,7 @@ export class GameState {
     mapSize = {
         width: 1200, height: 1200
     };
-    fruits = [];
+    fruits = {};
 }
 
 export class PublicRoom extends Room<GameState> {
@@ -124,19 +122,20 @@ export class PublicRoom extends Room<GameState> {
     }
 
     checkIfPlayerIsEatingFruit(player) {
-        this.state.fruits.forEach(fruit => {
-            if (fruit.eaten) return;
-            if (fruit.x > (player.x - player.radius) &&
-                fruit.y > (player.y - player.radius) &&
-                fruit.x < (player.x + player.radius) &&
-                fruit.y < (player.y + player.radius)) {
-                this.eat(player, fruit);
+        var eatenFruitKeys = [];
+        Object.keys(this.state.fruits).forEach(key => {
+            var fruit = this.state.fruits[key];
+            if ((Math.pow(fruit.x - player.x, 2) + Math.pow(fruit.y - player.y, 2)) < Math.pow(player.radius + FRUIT_RADIUS, 2)) {
+                eatenFruitKeys.push(key);
             }
+        });
+        eatenFruitKeys.forEach(key => {
+            this.eat(player, key);
         });
     }
 
-    eat(player, fruit) {
-        fruit.eaten = true;
+    eat(player, fruitKey) {
+        delete this.state.fruits[fruitKey];
         player.radius += FRUIT_RADIUS / 10;
         var newSpeed = player.speed - FRUIT_RADIUS / 20;
         if (newSpeed > PLAYER_MIN_SPEED) player.speed = newSpeed;
@@ -149,8 +148,7 @@ export class PublicRoom extends Room<GameState> {
         fr.x = FRUIT_RADIUS + Math.random() * (this.state.mapSize.width - 2 * FRUIT_RADIUS);
         fr.y = FRUIT_RADIUS + Math.random() * (this.state.mapSize.height - 2 * FRUIT_RADIUS);
         fr.color = FRUIT_COLORS[Math.floor(Math.random() * FRUIT_COLORS.length)];
-        fr.eaten = false;
-        this.state.fruits.push(fr);
+        this.state.fruits[fruitId++] = fr;
     }
 
     checkIfPlayerIsEatingAnotherPlayer(clientId, player) {
