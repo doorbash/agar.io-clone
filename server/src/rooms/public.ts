@@ -15,17 +15,18 @@ const FRUIT_COLORS: number[] = [
 ];
 
 const WORLD_UPDATE_INTERVAL = 16; // ms
-const FRUIT_RADIUS = 10;
-const EAT_RADIUS_CHANGE = 1;
-const EAT_SPEED_CHANGE = 0.5;
+
 const INIT_FRUITS = 50;
+const FRUIT_RADIUS = 10;
+
 const PLAYER_MIN_SPEED = 40;
 const PLAYER_INIT_SPEED = 120;
+const PLAYER_INIT_RADIUS = 40;
 
 export class Player {
-    x: number = 0;
-    y: number = 0;
-    radius: number = 40;
+    x: number;
+    y: number;
+    radius: number = PLAYER_INIT_RADIUS;
     color: number;
     @nosync speed: number = PLAYER_INIT_SPEED;
     @nosync angle = Math.PI * (Math.random() * 2 - 1);
@@ -70,9 +71,8 @@ export class PublicRoom extends Room<GameState> {
             this.generateFruit();
 
         this.setSimulationInterval(() => {
-            // update world here
             this.updateWorld();
-        }, 16);
+        }, WORLD_UPDATE_INTERVAL);
     }
 
     onJoin(client, options?, auth?) {
@@ -119,16 +119,17 @@ export class PublicRoom extends Room<GameState> {
 
             // check if player eat something
             this.checkIfPlayerIsEatingFruit(player);
+            this.checkIfPlayerIsEatingAnotherPlayer(key,player);
         });
     }
 
     checkIfPlayerIsEatingFruit(player) {
         this.state.fruits.forEach(fruit => {
             if (fruit.eaten) return;
-            if ((fruit.x - FRUIT_RADIUS) > (player.x - player.radius) &&
-                (fruit.y - FRUIT_RADIUS) > (player.y - player.radius) &&
-                (fruit.x + FRUIT_RADIUS) < (player.x + player.radius) &&
-                (fruit.y + FRUIT_RADIUS) < (player.y + player.radius)) {
+            if (fruit.x > (player.x - player.radius) &&
+                fruit.y > (player.y - player.radius) &&
+                fruit.x< (player.x + player.radius) &&
+                fruit.y < (player.y + player.radius)) {
                 this.eat(player, fruit);
             }
         });
@@ -136,8 +137,9 @@ export class PublicRoom extends Room<GameState> {
 
     eat(player, fruit) {
         fruit.eaten = true;
-        player.radius += EAT_RADIUS_CHANGE;
-        if (player.speed > PLAYER_MIN_SPEED) player.speed -= EAT_SPEED_CHANGE;
+        player.radius += FRUIT_RADIUS / 10;
+        var newSpeed = player.speed - FRUIT_RADIUS / 20;
+        if(newSpeed > PLAYER_MIN_SPEED) player.speed = newSpeed;
         console.log('yum yum yummm');
         this.generateFruit();
     }
@@ -149,6 +151,30 @@ export class PublicRoom extends Room<GameState> {
         fr.color = FRUIT_COLORS[Math.floor(Math.random() * FRUIT_COLORS.length)];
         fr.eaten = false;
         this.state.fruits.push(fr);
+    }
+
+    checkIfPlayerIsEatingAnotherPlayer(clientId,player) {
+        Object.keys(this.state.players).forEach(key => {
+            if(key == clientId) return;
+            var p = this.state.players[key];
+            if (p.radius < player.radius &&
+                p.x > (player.x - player.radius) &&
+                p.y > (player.y - player.radius) &&
+                p.x < (player.x + player.radius) &&
+                p.y < (player.y + player.radius)) {
+                this.eatPlayer(player, p);
+            }
+        });
+    }
+
+    eatPlayer(player, player2) {
+        player.radius += player2.radius / 10;
+        var newSpeed = player.speed - player2.radius / 20;
+        if(newSpeed > PLAYER_MIN_SPEED) player.speed = newSpeed;
+        console.log('oh nooooo');
+        player2.x = Math.floor(Math.random() * this.state.mapSize.width);
+        player2.y = Math.floor(Math.random() * this.state.mapSize.height);
+        player2.radius = PLAYER_INIT_RADIUS;
     }
 
 }
