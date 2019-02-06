@@ -11,7 +11,7 @@ const port = Number(process.env.PORT || 3300);
 //     const cpus = os.cpus().length;
 //     console.log('cpus = ' + cpus);
 //     for (let i = 0; i < cpus; ++i) {
-//         cluster.fork({PORT: 6000});
+//         cluster.fork({PORT: 3300});
 //     }
 // } else {
     const app = express();
@@ -20,9 +20,6 @@ const port = Number(process.env.PORT || 3300);
 
     const gameServer = new Server({
         server: createServer(app),
-        // presence: new RedisPresence({
-        //     // host: "185.8.175.236" 
-        // }),
         verifyClient: function (info, next) {
             var userAgent = info.req.headers['user-agent']
             console.log('new connection: useragent: ' + userAgent);
