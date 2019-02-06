@@ -48,6 +48,8 @@ public class Game extends ApplicationAdapter {
     HashMap<String, Player> players = new HashMap<>();
     Fruit[] fruits = new Fruit[10000];
     int numFruits = 0;
+    int mapWidth;
+    int mapHeight;
 
     @Override
     public void create() {
@@ -69,7 +71,6 @@ public class Game extends ApplicationAdapter {
         shapeRenderer.setProjectionMatrix(camera.combined);
 
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(new Color(0, 0, 0, 0.1f));
         drawGrid(-300, -300, (int) gridSize.x, (int) gridSize.y, 60);
         drawFruits();
         drawPlayers();
@@ -90,6 +91,7 @@ public class Game extends ApplicationAdapter {
     }
 
     private void drawGrid(int startX, int startY, int width, int height, int size) {
+        shapeRenderer.setColor(Color.BLACK);
         for (int i = startX; i < width; i += size) {
             shapeRenderer.line(i, startY, i, height);
         }
@@ -97,6 +99,13 @@ public class Game extends ApplicationAdapter {
         for (int i = startY; i < height; i += size) {
             shapeRenderer.line(startX, i, width, i);
         }
+
+        shapeRenderer.end();
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        shapeRenderer.setColor(Color.RED);
+        shapeRenderer.rect(0,0,mapWidth,mapHeight);
+        shapeRenderer.end();
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
     }
 
     private void drawFruits() {
@@ -261,6 +270,16 @@ public class Game extends ApplicationAdapter {
                         fruits[Integer.parseInt(dataChange.path.get("id"))].eaten = true;
                     }
                 });
+                room.addPatchListener("mapSize/:id", new PatchListenerCallback() {
+                    @Override
+                    protected void callback(DataChange dataChange) {
+                        if(dataChange.path.get("id").equals("width")) {
+                            mapWidth = (int) dataChange.value;
+                        } else if(dataChange.path.get("id").equals("height")) {
+                            mapHeight = (int) dataChange.value;
+                        }
+                    }
+                });
                 room.setDefaultPatchListener(new FallbackPatchListenerCallback() {
                     @Override
                     public void callback(PatchObject patchObject) {
@@ -289,7 +308,7 @@ public class Game extends ApplicationAdapter {
         });
     }
 
-    public void networkUpdate() {
+    private void networkUpdate() {
         if (room == null) return;
         float dx = Gdx.input.getX() - width / 2;
         float dy = height / 2 - Gdx.input.getY();

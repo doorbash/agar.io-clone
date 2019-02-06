@@ -17,7 +17,7 @@ const FRUIT_COLORS: number[] = [
 const WORLD_UPDATE_INTERVAL = 16; // ms
 const FRUIT_RADIUS = 10;
 const EAT_RADIUS_CHANGE = 1;
-const EAT_SPEED_CHANGE = 1;
+const EAT_SPEED_CHANGE = 0.5;
 const INIT_FRUITS = 50;
 const PLAYER_MIN_SPEED = 40;
 const PLAYER_INIT_SPEED = 120;
@@ -41,7 +41,7 @@ export class Fruit {
 export class GameState {
     players = {};
     mapSize = {
-        width: 1000, height: 1000
+        width: 1200, height: 1200
     };
     fruits = [];
 }
@@ -112,8 +112,8 @@ export class PublicRoom extends Room<GameState> {
             var player = this.state.players[key];
             var newX = player.x + Math.cos(player.angle) * player.speed * WORLD_UPDATE_INTERVAL / 1000;
             var newY = player.y + Math.sin(player.angle) * player.speed * WORLD_UPDATE_INTERVAL / 1000;
-            if (newX < 0) newX = 0; else if (newX > this.state.mapSize.width) newX = this.state.mapSize.width;
-            if (newY < 0) newY = 0; else if (newY > this.state.mapSize.height) newY = this.state.mapSize.height;
+            if ((newX - player.radius) < 0) newX = player.radius; else if ((newX + player.radius) > this.state.mapSize.width) newX = this.state.mapSize.width - player.radius;
+            if ((newY - player.radius) < 0) newY = player.radius; else if ((newY + player.radius) > this.state.mapSize.height) newY = this.state.mapSize.height - player.radius;
             player.x = newX;
             player.y = newY;
 
@@ -144,8 +144,8 @@ export class PublicRoom extends Room<GameState> {
 
     generateFruit() {
         var fr: Fruit = new Fruit();
-        fr.x = Math.random() * this.state.mapSize.width;
-        fr.y = Math.random() * this.state.mapSize.height;
+        fr.x = FRUIT_RADIUS + Math.random() * (this.state.mapSize.width - 2 * FRUIT_RADIUS);
+        fr.y = FRUIT_RADIUS + Math.random() * (this.state.mapSize.height - 2 * FRUIT_RADIUS);
         fr.color = FRUIT_COLORS[Math.floor(Math.random() * FRUIT_COLORS.length)];
         fr.eaten = false;
         this.state.fruits.push(fr);
