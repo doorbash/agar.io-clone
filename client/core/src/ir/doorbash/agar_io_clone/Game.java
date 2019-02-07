@@ -38,12 +38,11 @@ public class Game extends ApplicationAdapter {
 
     private ShapeRenderer shapeRenderer;
     private OrthographicCamera camera;
-    private float width = 600;
-    private float height = 600;
-    Vector2 gridSize = new Vector2(2000, 2000);
+    private int width = 600;
+    private int height = 600;
     Client client;
     Room room;
-    double lastAngle = -1000;
+    int lastAngle = -1000;
     HashMap<String, Player> players = new HashMap<>();
     final LinkedHashMap<String, Fruit> fruits = new LinkedHashMap<>();
     int mapWidth;
@@ -69,7 +68,7 @@ public class Game extends ApplicationAdapter {
         shapeRenderer.setProjectionMatrix(camera.combined);
 
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        drawGrid(-300, -300, (int) gridSize.x, (int) gridSize.y, 60);
+        drawGrid(-width/2, -height/2, mapWidth + width / 2, mapHeight + height / 2, 60);
         drawFruits();
         drawPlayers();
         shapeRenderer.end();
@@ -155,14 +154,14 @@ public class Game extends ApplicationAdapter {
                 room = client.join("public");
                 room.addPatchListener("players/:id", new PatchListenerCallback() {
                     @Override
-                    protected void callback(DataChange dataChange) {
+                    protected void callback(DataChange change) {
 //                        System.out.println(">>> players/:id");
-//                        System.out.println(dataChange.path);
-//                        System.out.println(dataChange.operation);
-//                        System.out.println(dataChange.value);
-                        if (dataChange.operation.equals("add")) {
+//                        System.out.println(change.path);
+//                        System.out.println(change.operation);
+//                        System.out.println(change.value);
+                        if (change.operation.equals("add")) {
                             Player player = new Player();
-                            LinkedHashMap<String, Object> data = (LinkedHashMap<String, Object>) dataChange.value;
+                            LinkedHashMap<String, Object> data = (LinkedHashMap<String, Object>) change.value;
 
                             if (data.get("x") instanceof Float) player.x = (Float) data.get("x");
                             else if (data.get("x") instanceof Double) player.x = ((Double) data.get("x")).floatValue();
@@ -187,57 +186,57 @@ public class Game extends ApplicationAdapter {
                             player.strokeColor = new Color(player.color);
                             player.strokeColor.mul(0.9f);
 
-                            players.put(dataChange.path.get("id"), player);
-                        } else if (dataChange.operation.equals("remove")) {
-                            players.remove(dataChange.path.get("id"));
+                            players.put(change.path.get("id"), player);
+                        } else if (change.operation.equals("remove")) {
+                            players.remove(change.path.get("id"));
                         }
                     }
                 });
                 room.addPatchListener("players/:id/:attribute", new PatchListenerCallback() {
                     @Override
-                    protected void callback(DataChange dataChange) {
+                    protected void callback(DataChange change) {
 //                        System.out.println(">>> players/:id/:attribute");
-//                        System.out.println(dataChange.path);
-//                        System.out.println(dataChange.operation);
-//                        System.out.println(dataChange.value);
+//                        System.out.println(change.path);
+//                        System.out.println(change.operation);
+//                        System.out.println(change.value);
 
-                        Player player = players.get(dataChange.path.get("id"));
+                        Player player = players.get(change.path.get("id"));
                         if (player == null) return;
-                        String attribute = dataChange.path.get("attribute");
+                        String attribute = change.path.get("attribute");
                         if (attribute.equals("x")) {
-                            if (dataChange.value instanceof Double) {
-                                player.x = ((Double) dataChange.value).floatValue();
-                            } else if (dataChange.value instanceof Integer) {
-                                player.x = ((Integer) dataChange.value).floatValue();
-                            } else if (dataChange.value instanceof Float) {
-                                player.x = ((Float) dataChange.value).floatValue();
+                            if (change.value instanceof Double) {
+                                player.x = ((Double) change.value).floatValue();
+                            } else if (change.value instanceof Integer) {
+                                player.x = ((Integer) change.value).floatValue();
+                            } else if (change.value instanceof Float) {
+                                player.x = ((Float) change.value).floatValue();
                             }
                         } else if (attribute.equals("y")) {
-                            if (dataChange.value instanceof Double) {
-                                player.y = ((Double) dataChange.value).floatValue();
-                            } else if (dataChange.value instanceof Integer) {
-                                player.y = ((Integer) dataChange.value).floatValue();
-                            } else if (dataChange.value instanceof Float) {
-                                player.y = ((Float) dataChange.value).floatValue();
+                            if (change.value instanceof Double) {
+                                player.y = ((Double) change.value).floatValue();
+                            } else if (change.value instanceof Integer) {
+                                player.y = ((Integer) change.value).floatValue();
+                            } else if (change.value instanceof Float) {
+                                player.y = ((Float) change.value).floatValue();
                             }
                         } else if (attribute.equals("radius")) {
-                            if (dataChange.value instanceof Float) player.radius = (Float) dataChange.value;
-                            else if (dataChange.value instanceof Double)
-                                player.radius = ((Double) dataChange.value).floatValue();
-                            else if (dataChange.value instanceof Integer)
-                                player.radius = ((Integer) dataChange.value).floatValue();
+                            if (change.value instanceof Float) player.radius = (Float) change.value;
+                            else if (change.value instanceof Double)
+                                player.radius = ((Double) change.value).floatValue();
+                            else if (change.value instanceof Integer)
+                                player.radius = ((Integer) change.value).floatValue();
                         }
 
                     }
                 });
                 room.addPatchListener("fruits/:id", new PatchListenerCallback() {
                     @Override
-                    protected void callback(DataChange dataChange) {
-                        System.out.println(dataChange);
-                        if (dataChange.operation.equals("add")) {
+                    protected void callback(DataChange change) {
+                        System.out.println(change);
+                        if (change.operation.equals("add")) {
                             Fruit fruit = new Fruit();
 
-                            LinkedHashMap<String, Object> data = (LinkedHashMap<String, Object>) dataChange.value;
+                            LinkedHashMap<String, Object> data = (LinkedHashMap<String, Object>) change.value;
 
                             if (data.get("x") instanceof Float) fruit.x = (Float) data.get("x");
                             else if (data.get("x") instanceof Double) fruit.x = ((Double) data.get("x")).floatValue();
@@ -255,32 +254,32 @@ public class Game extends ApplicationAdapter {
                             fruit.color = new Color(color);
 
                             synchronized (fruits) {
-                                fruits.put(dataChange.path.get("id"), fruit);
+                                fruits.put(change.path.get("id"), fruit);
                             }
-                        } else if (dataChange.operation.equals("remove")) {
+                        } else if (change.operation.equals("remove")) {
                             synchronized (fruits) {
-                                fruits.remove(dataChange.path.get("id"));
+                                fruits.remove(change.path.get("id"));
                             }
                         }
                     }
                 });
                 room.addPatchListener("mapSize/:id", new PatchListenerCallback() {
                     @Override
-                    protected void callback(DataChange dataChange) {
-                        if (dataChange.path.get("id").equals("width")) {
-                            mapWidth = (int) dataChange.value;
-                        } else if (dataChange.path.get("id").equals("height")) {
-                            mapHeight = (int) dataChange.value;
+                    protected void callback(DataChange change) {
+                        if (change.path.get("id").equals("width")) {
+                            mapWidth = (int) change.value;
+                        } else if (change.path.get("id").equals("height")) {
+                            mapHeight = (int) change.value;
                         }
                     }
                 });
                 room.setDefaultPatchListener(new FallbackPatchListenerCallback() {
                     @Override
-                    public void callback(PatchObject patchObject) {
+                    public void callback(PatchObject patch) {
 //                        System.out.println(" >>> default listener");
-//                        System.out.println(patchObject.path);
-//                        System.out.println(patchObject.operation);
-//                        System.out.println(patchObject.value);
+//                        System.out.println(patch.path);
+//                        System.out.println(patch.operation);
+//                        System.out.println(patch.value);
                     }
                 });
             }
@@ -306,7 +305,7 @@ public class Game extends ApplicationAdapter {
         if (room == null) return;
         float dx = Gdx.input.getX() - width / 2;
         float dy = height / 2 - Gdx.input.getY();
-        long angle = Math.round(Math.atan2(dy, dx) * 57.2958f);
+        int angle = (int) Math.toDegrees(Math.atan2(dy, dx));
         if (lastAngle != angle) {
             LinkedHashMap<String, Object> data = new LinkedHashMap<String, Object>();
             data.put("op", "angle");
