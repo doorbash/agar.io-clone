@@ -3,6 +3,7 @@ package ir.doorbash.agar_io_clone;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.FPSLogger;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
@@ -19,7 +20,9 @@ import java.util.LinkedHashMap;
 
 public class Game extends ApplicationAdapter {
 
-    private static final int NETWORK_UPDATE_INTERVAL = 200; // ms
+    private static final int NETWORK_UPDATE_INTERVAL = 200;
+    private static final int GRID_SIZE = 60;
+    private static final int FRUIT_RADIUS = 10;
 
     class Player {
         float x;
@@ -46,11 +49,13 @@ public class Game extends ApplicationAdapter {
     private final LinkedHashMap<String, Fruit> fruits = new LinkedHashMap<>();
     private int mapWidth;
     private int mapHeight;
-    private long lastNetworkUpdateTime = 0;
-    LinkedHashMap<String, Object> message;
+    private long lastNetworkUpdateTime;
+    private LinkedHashMap<String, Object> message;
+    private FPSLogger fpsLogger;
 
     @Override
     public void create() {
+        fpsLogger = new FPSLogger();
         shapeRenderer = new ShapeRenderer();
         camera = new OrthographicCamera(width, height);
         message = new LinkedHashMap<>();
@@ -60,6 +65,7 @@ public class Game extends ApplicationAdapter {
 
     @Override
     public void render() {
+//        fpsLogger.log();
         Gdx.gl.glClearColor(0.98f, 0.99f, 1, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
@@ -71,7 +77,7 @@ public class Game extends ApplicationAdapter {
         shapeRenderer.setProjectionMatrix(camera.combined);
 
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        drawGrid(-width / 2, -height / 2, mapWidth + width / 2, mapHeight + height / 2, 60);
+        drawGrid();
         drawFruits();
         drawPlayers();
         shapeRenderer.end();
@@ -94,14 +100,33 @@ public class Game extends ApplicationAdapter {
     public void resize(int width, int height) {
     }
 
-    private void drawGrid(int startX, int startY, int width, int height, int size) {
-        shapeRenderer.setColor(Color.BLACK);
-        for (int i = startX; i < width; i += size) {
-            shapeRenderer.line(i, startY, i, height);
+    private void drawGrid() {
+        Player player;
+        int leftBottomX;
+        int leftBottomY;
+        int rightTopX;
+        int rightTopY;
+
+        if (client != null && (player = players.get(client.getId())) != null) {
+            leftBottomX = (int) (player.x - width / 2);
+            leftBottomY = (int) (player.y - height / 2);
+        } else {
+            leftBottomX = -width / 2;
+            leftBottomY = -height / 2;
         }
 
-        for (int i = startY; i < height; i += size) {
-            shapeRenderer.line(startX, i, width, i);
+        leftBottomX -= leftBottomX % GRID_SIZE + GRID_SIZE;
+        leftBottomY -= leftBottomY % GRID_SIZE + GRID_SIZE;
+        rightTopX = leftBottomX + width + 2 * GRID_SIZE;
+        rightTopY = leftBottomY + height + 2 * GRID_SIZE;
+
+        shapeRenderer.setColor(Color.BLACK);
+        for (int i = leftBottomX; i < rightTopX; i += GRID_SIZE) {
+            shapeRenderer.line(i, leftBottomY, i, rightTopY);
+        }
+
+        for (int i = leftBottomY; i < rightTopY; i += GRID_SIZE) {
+            shapeRenderer.line(leftBottomX, i, rightTopX, i);
         }
 
         shapeRenderer.end();
@@ -113,36 +138,42 @@ public class Game extends ApplicationAdapter {
     }
 
     private void drawFruits() {
+        if (client == null) return;
+        Player thisPlayer = players.get(client.getId());
+        if (thisPlayer == null) return;
         synchronized (fruits) {
             for (String fruitId : fruits.keySet()) {
                 Fruit fr = fruits.get(fruitId);
                 if (fr == null) continue;
+                if (!objectIsInCurrentScreen(thisPlayer, fr.x, fr.y, FRUIT_RADIUS)) continue;
                 shapeRenderer.setColor(fr.color);
-                shapeRenderer.circle(fr.x, fr.y, 10);
+                shapeRenderer.circle(fr.x, fr.y, FRUIT_RADIUS);
             }
         }
     }
 
     private void drawPlayers() {
-
         if (client == null) return;
+        Player thisPlayer = players.get(client.getId());
+        if (thisPlayer == null) return;
 
-        // draw other players
         for (String id : players.keySet()) {
-            if (id.equals(client.getId())) continue;
             Player player = players.get(id);
-            shapeRenderer.setColor(player.strokeColor);
-            shapeRenderer.circle(player.x, player.y, player.radius);
-            shapeRenderer.setColor(player.color);
-            shapeRenderer.circle(player.x, player.y, player.radius - 3);
+            if (id.equals(client.getId()) || objectIsInCurrentScreen(thisPlayer, player.x, player.y, player.radius)) {
+                shapeRenderer.setColor(player.strokeColor);
+                shapeRenderer.circle(player.x, player.y, player.radius);
+                shapeRenderer.setColor(player.color);
+                shapeRenderer.circle(player.x, player.y, player.radius - 3);
+            }
         }
-        // draw me
-        Player player = players.get(client.getId());
-        if (player == null) return;
-        shapeRenderer.setColor(player.strokeColor);
-        shapeRenderer.circle(player.x, player.y, player.radius);
-        shapeRenderer.setColor(player.color);
-        shapeRenderer.circle(player.x, player.y, player.radius - 3);
+    }
+
+    private boolean objectIsInCurrentScreen(Player player, float x, float y, float radius) {
+        if (x + radius < player.x - width / 2) return false;
+        if (x - radius > player.x + width / 2) return false;
+        if (y + radius < player.y - height / 2) return false;
+        if (y - radius > player.y + height / 2) return false;
+        return true;
     }
 
     private void adjustCamera() {
@@ -150,7 +181,7 @@ public class Game extends ApplicationAdapter {
         Player player = players.get(client.getId());
         if (player == null) return;
         camera.position.set(new Vector3(player.x, player.y, 0));
-//        camera.zoom = 10;
+        camera.zoom = 1;
         camera.update();
     }
 
