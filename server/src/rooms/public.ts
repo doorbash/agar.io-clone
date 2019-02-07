@@ -20,6 +20,7 @@ const FRUIT_RADIUS = 10;
 const PLAYER_MIN_SPEED = 40;
 const PLAYER_INIT_SPEED = 120;
 const PLAYER_INIT_RADIUS = 40;
+
 var fruitId = 0;
 
 export class Player {
