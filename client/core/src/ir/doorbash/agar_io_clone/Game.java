@@ -47,11 +47,14 @@ public class Game extends ApplicationAdapter {
     private int mapWidth;
     private int mapHeight;
     private long lastNetworkUpdateTime = 0;
+    LinkedHashMap<String, Object> message;
 
     @Override
     public void create() {
         shapeRenderer = new ShapeRenderer();
         camera = new OrthographicCamera(width, height);
+        message = new LinkedHashMap<>();
+        message.put("op", "angle");
         connectToServer();
     }
 
@@ -315,13 +318,12 @@ public class Game extends ApplicationAdapter {
     private void networkUpdate() {
         if (room == null) return;
         float dx = Gdx.input.getX() - width / 2;
-        float dy = -(Gdx.input.getY() - height / 2);
-        int angle = (int) Math.toDegrees(Math.atan2(dy, dx));
+        float dy = Gdx.input.getY() - height / 2;
+        int angle = (int) Math.toDegrees(Math.atan2(-dy, dx));
         if (lastAngle != angle) {
-            LinkedHashMap<String, Object> data = new LinkedHashMap<String, Object>();
-            data.put("op", "angle");
-            data.put("angle", angle);
-            room.send(data);
+//            message.put("op", "angle");
+            message.put("angle", angle);
+            room.send(message);
             lastAngle = angle;
         }
     }
