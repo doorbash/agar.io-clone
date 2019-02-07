@@ -6,7 +6,6 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
-import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import io.colyseus.Client;
 import io.colyseus.Room;
@@ -15,38 +14,39 @@ import io.colyseus.state_listener.FallbackPatchListenerCallback;
 import io.colyseus.state_listener.PatchListenerCallback;
 import io.colyseus.state_listener.PatchObject;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.List;
 
 public class Game extends ApplicationAdapter {
 
+    private static final int NETWORK_UPDATE_INTERVAL = 200; // ms
+
     class Player {
-        public float x;
-        public float y;
-        public Color color;
-        public Color strokeColor;
-        public float radius;
+        float x;
+        float y;
+        Color color;
+        Color strokeColor;
+        float radius;
     }
 
     class Fruit {
-        public float x;
-        public float y;
-        public Color color;
+        float x;
+        float y;
+        Color color;
     }
 
     private ShapeRenderer shapeRenderer;
     private OrthographicCamera camera;
     private int width = 600;
     private int height = 600;
-    Client client;
-    Room room;
-    int lastAngle = -1000;
-    HashMap<String, Player> players = new HashMap<>();
-    final LinkedHashMap<String, Fruit> fruits = new LinkedHashMap<>();
-    int mapWidth;
-    int mapHeight;
+    private Client client;
+    private Room room;
+    private int lastAngle = -1000;
+    private HashMap<String, Player> players = new HashMap<>();
+    private final LinkedHashMap<String, Fruit> fruits = new LinkedHashMap<>();
+    private int mapWidth;
+    private int mapHeight;
+    private long lastNetworkUpdateTime = 0;
 
     @Override
     public void create() {
@@ -68,12 +68,16 @@ public class Game extends ApplicationAdapter {
         shapeRenderer.setProjectionMatrix(camera.combined);
 
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        drawGrid(-width/2, -height/2, mapWidth + width / 2, mapHeight + height / 2, 60);
+        drawGrid(-width / 2, -height / 2, mapWidth + width / 2, mapHeight + height / 2, 60);
         drawFruits();
         drawPlayers();
         shapeRenderer.end();
 
-        networkUpdate();
+        long now = System.currentTimeMillis();
+        if (now - lastNetworkUpdateTime >= NETWORK_UPDATE_INTERVAL) {
+            lastNetworkUpdateTime = now;
+            networkUpdate();
+        }
     }
 
     @Override
@@ -209,7 +213,7 @@ public class Game extends ApplicationAdapter {
                             } else if (change.value instanceof Integer) {
                                 player.x = ((Integer) change.value).floatValue();
                             } else if (change.value instanceof Float) {
-                                player.x = ((Float) change.value).floatValue();
+                                player.x = (Float) change.value;
                             }
                         } else if (attribute.equals("y")) {
                             if (change.value instanceof Double) {
@@ -217,7 +221,7 @@ public class Game extends ApplicationAdapter {
                             } else if (change.value instanceof Integer) {
                                 player.y = ((Integer) change.value).floatValue();
                             } else if (change.value instanceof Float) {
-                                player.y = ((Float) change.value).floatValue();
+                                player.y = (Float) change.value;
                             }
                         } else if (attribute.equals("radius")) {
                             if (change.value instanceof Float) player.radius = (Float) change.value;
@@ -291,12 +295,19 @@ public class Game extends ApplicationAdapter {
 
             @Override
             public void onClose(int i, String s, boolean b) {
-                System.out.println("close");
+                try {
+                    Thread.sleep(2000);
+                    players.clear();
+                    fruits.clear();
+                    connectToServer();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
             }
 
             @Override
             public void onError(Exception e) {
-                System.out.println(e);
+                e.printStackTrace();
             }
         });
     }
@@ -304,7 +315,7 @@ public class Game extends ApplicationAdapter {
     private void networkUpdate() {
         if (room == null) return;
         float dx = Gdx.input.getX() - width / 2;
-        float dy = height / 2 - Gdx.input.getY();
+        float dy = -(Gdx.input.getY() - height / 2);
         int angle = (int) Math.toDegrees(Math.atan2(dy, dx));
         if (lastAngle != angle) {
             LinkedHashMap<String, Object> data = new LinkedHashMap<String, Object>();
