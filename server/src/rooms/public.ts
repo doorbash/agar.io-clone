@@ -1,4 +1,5 @@
 import { Room, Presence, nosync } from "colyseus";
+import { send } from "colyseus/lib/Protocol";
 
 const PLAYER_COLORS: number[] = [
     0x4cb050FF,
@@ -93,6 +94,9 @@ export class PublicRoom extends Room<GameState> {
         switch (data.op) {
             case 'angle': {
                 player.angle = data.angle * 0.0174533;
+            } break;
+            case 'ping': {
+                send(client, 'pong');
             } break;
         }
     }
