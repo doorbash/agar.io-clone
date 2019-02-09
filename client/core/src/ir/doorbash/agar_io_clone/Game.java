@@ -21,10 +21,16 @@ import java.util.LinkedHashMap;
 
 public class Game extends ApplicationAdapter {
 
+    private static final String ENDPOINT = "ws://127.0.0.1:3300";
     private static final int NETWORK_UPDATE_INTERVAL = 200;
+    private static final int CHECK_LATENCY_INTERVAL = 10000;
     private static final int GRID_SIZE = 60;
     private static final int FRUIT_RADIUS = 10;
-    private static final float LERP_ALPHA = 0.5f;
+    private static final float LERP_MIN = 0.1f;
+    private static final float LERP_MAX = 0.5f;
+    private static final int LATENCY_MIN = 100; // ms
+    private static final int LATENCY_MAX = 500; // ms
+    private static final float OTHER_PLAYERS_LERP = 0.5f;
 
     class Player {
         Vector2 position = new Vector2();
@@ -51,8 +57,10 @@ public class Game extends ApplicationAdapter {
     private int mapWidth;
     private int mapHeight;
     private long lastNetworkUpdateTime;
+    private long lastLatencyCheckTime;
     private LinkedHashMap<String, Object> message;
     private FPSLogger fpsLogger;
+    private float lerp = LERP_MAX;
 
     @Override
     public void create() {
@@ -89,6 +97,10 @@ public class Game extends ApplicationAdapter {
             lastNetworkUpdateTime = now;
             networkUpdate();
         }
+        if (now - lastLatencyCheckTime >= CHECK_LATENCY_INTERVAL) {
+            lastLatencyCheckTime = now;
+            checkLatency();
+        }
     }
 
     @Override
@@ -108,8 +120,9 @@ public class Game extends ApplicationAdapter {
             Player player = players.get(clientId);
             if (player == null) continue;
             if (clientId.equals(client.getId()))
-                player.position.lerp(player.newPosition, LERP_ALPHA);
-            else player.position = player.newPosition;
+                player.position.lerp(player.newPosition, lerp);
+            else
+                player.position.lerp(player.newPosition, OTHER_PLAYERS_LERP);
         }
     }
 
@@ -199,7 +212,7 @@ public class Game extends ApplicationAdapter {
     }
 
     private void connectToServer() {
-        client = new Client("ws://localhost:3300", new Client.Listener() {
+        client = new Client(ENDPOINT, new Client.Listener() {
             @Override
             public void onOpen(String id) {
                 room = client.join("public");
@@ -341,6 +354,14 @@ public class Game extends ApplicationAdapter {
 //                        System.out.println(patch.value);
                     }
                 });
+                room.addListener(new Room.RoomListener() {
+                    @Override
+                    protected void onMessage(Object message) {
+                        if (message.equals("pong")) {
+                            calculateLerp(System.currentTimeMillis() - lastLatencyCheckTime);
+                        }
+                    }
+                });
             }
 
             @Override
@@ -373,10 +394,26 @@ public class Game extends ApplicationAdapter {
         float dy = Gdx.input.getY() - height / 2;
         int angle = (int) Math.toDegrees(Math.atan2(-dy, dx));
         if (lastAngle != angle) {
-//            message.put("op", "angle");
             message.put("angle", angle);
             room.send(message);
             lastAngle = angle;
         }
+    }
+
+    private void checkLatency() {
+        if (room == null) return;
+        LinkedHashMap<String, Object> data = new LinkedHashMap<>();
+        data.put("op", "ping");
+        room.send(data);
+    }
+
+    private void calculateLerp(float currentLatency) {
+        float latency;
+        if (currentLatency < LATENCY_MIN) latency = LATENCY_MIN;
+        else if (currentLatency > LATENCY_MAX) latency = LATENCY_MAX;
+        else latency = currentLatency;
+        lerp = LERP_MAX + ((latency - LATENCY_MIN) / (LATENCY_MAX - LATENCY_MIN)) * (LERP_MIN - LERP_MAX);
+        System.out.println("current latency: " + currentLatency + " ms");
+        System.out.println("lerp : " + lerp);
     }
 }
