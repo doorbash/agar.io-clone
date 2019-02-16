@@ -354,7 +354,7 @@ public class Game extends ApplicationAdapter {
 //                        System.out.println(patch.value);
                     }
                 });
-                room.addListener(new Room.RoomListener() {
+                room.addListener(new Room.Listener() {
                     @Override
                     protected void onMessage(Object message) {
                         if (message.equals("pong")) {
