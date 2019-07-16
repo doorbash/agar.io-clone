@@ -1,39 +1,23 @@
 import * as express from 'express';
 import { createServer } from 'http';
-import { Server, RedisPresence } from 'colyseus';
-import { PublicRoom } from "./rooms/public";
-import * as cors from "cors";
+import { Server } from 'colyseus';
 
+// Import demo room handlers
+import { PublicRoom } from "./rooms/public"
 
-const port = Number(process.env.PORT || 3300);
+const port = 2560
+const app = express()
 
-// if (cluster.isMaster) {
-//     const cpus = os.cpus().length;
-//     console.log('cpus = ' + cpus);
-//     for (let i = 0; i < cpus; ++i) {
-//         cluster.fork({PORT: 3300});
-//     }
-// } else {
-    const app = express();
+// Attach WebSocket Server on HTTP Server.
+const gameServer = new Server({
+  server: createServer(app)
+});
 
-    app.use(cors());
+gameServer.register("public", PublicRoom);
 
-    const gameServer = new Server({
-        server: createServer(app),
-        verifyClient: function (info, next) {
-            var userAgent = info.req.headers['user-agent']
-            console.log('new connection: useragent: ' + userAgent);
-            next(true);
-        }
-    });
+gameServer.onShutdown(function () {
+  console.log(`game server is going down.`);
+});
 
-    gameServer.register("public", PublicRoom);
-
-
-    gameServer.onShutdown(function () {
-        console.log(`game server is going down.`);
-    });
-
-    gameServer.listen(port);
-    console.log(`Listening on http://localhost:${port}`);
-// }
+gameServer.listen(port, '0.0.0.0');
+console.log(`Listening on http://localhost:${port}`);

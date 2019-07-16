@@ -1,7 +1,7 @@
+targetCompatibility = 1.8
 apply plugin: "java"
 
-targetCompatibility = 1.7
-sourceCompatibility = 1.7
+sourceCompatibility = 1.8
 [compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
 
 sourceSets.main.java.srcDirs = [ "src/" ]
@@ -13,5 +13,5 @@ eclipse.project {
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
-    implementation 'ir.doorbash:colyseus-java:1.2.1'
+    implementation 'ir.doorbash:colyseus-java:2.0.0'
 }

@@ -1,5 +1,5 @@
-import { Room, Presence, nosync } from "colyseus";
-import { send } from "colyseus/lib/Protocol";
+import { Schema, type, ArraySchema, MapSchema } from "@colyseus/schema"
+import { Room, Client } from "colyseus"
 
 const PLAYER_COLORS: number[] = [
     0x4cb050FF,
@@ -24,48 +24,49 @@ const PLAYER_INIT_RADIUS = 40;
 
 var fruitId = 0;
 
-export class Player {
+class Player extends Schema {
+    @type("float32")
     x: number;
+
+    @type("float32")
     y: number;
+
+    @type("float32")
     radius: number = PLAYER_INIT_RADIUS;
+
+    @type("int32")
     color: number;
-    @nosync speed: number = PLAYER_INIT_SPEED;
-    @nosync angle = Math.PI * (Math.random() * 2 - 1);
+
+    speed: number = PLAYER_INIT_SPEED;
+    angle = Math.PI * (Math.random() * 2 - 1);
 }
 
-export class Fruit {
+class Fruit extends Schema {
+    @type("float32")
     x: number;
+
+    @type("float32")
     y: number;
+
+    @type("int32")
     color: number;
 }
 
-export class GameState {
-    players = {};
-    mapSize = {
-        width: 1200, height: 1200
-    };
-    fruits = {};
+class GameState extends Schema {
+    @type({ map: Player })
+    players = new MapSchema<Player>();
+
+    @type({ map: Fruit })
+    fruits = new MapSchema<Fruit>();
 }
 
-export class PublicRoom extends Room<GameState> {
+export class PublicRoom extends Room {
 
     maxClients = 20;
-    autoDispose = false;
-
-    constructor(presence?: Presence) {
-        super(presence);
-    }
-
-    requestJoin(options, isNew) {
-        return true;
-    }
+    autoDispose = true;
 
     onInit(options) {
-        console.log(this.getLogTag(), "Game Room created!", options);
-
-        var state = new GameState();
-        state.players = {};
-        this.setState(state);
+        this.setState(new GameState());
 
         for (var i = 0; i < INIT_FRUITS; i++)
             this.generateFruit();
@@ -75,38 +76,35 @@ export class PublicRoom extends Room<GameState> {
         }, WORLD_UPDATE_INTERVAL);
     }
 
-    onJoin(client, options?, auth?) {
-        console.log(this.getLogTag(), 'Client joined: ' + client.id);
-        this.state.players[client.id] = new Player();
-        this.state.players[client.id].x = Math.floor(Math.random() * this.state.mapSize.width);
-        this.state.players[client.id].y = Math.floor(Math.random() * this.state.mapSize.height);
-        this.state.players[client.id].color = PLAYER_COLORS[Math.floor(Math.random() * PLAYER_COLORS.length)];
+    onJoin?(client: Client, options?: any, auth?: any): void | Promise<any> {
+        console.log('onJoin(', client.id, ')', options);
+        var player: Player = new Player();
+        player.x = Math.floor(Math.random() * 1200);
+        player.y = Math.floor(Math.random() * 1200);
+        player.color = PLAYER_COLORS[Math.floor(Math.random() * PLAYER_COLORS.length)];
+        this.state.players[client.id] = player;
     }
 
-    onLeave(client, consented?) {
-        console.log(this.getLogTag(), 'Client left: ' + client.id);
+    onLeave(client) {
+        console.log("onLeave(" + client.sessionId + ")");
         delete this.state.players[client.id];
     }
 
     onMessage(client, data) {
-        console.log(this.getLogTag(), "Received message from " + client.id + " :", data);
+        console.log("Room received message from", client.id, ":", data);
         var player = this.state.players[client.id];
         switch (data.op) {
             case 'angle': {
                 player.angle = data.angle * 0.0174533;
             } break;
             case 'ping': {
-                send(client, 'pong');
+                this.send(client, 'pong');
             } break;
         }
     }
 
     onDispose() {
-        console.log(this.getLogTag(), "Room disposed");
-    }
-
-    getLogTag() {
-        return '[' + (new Date()).toLocaleString() + '] ' + this.roomName + '(' + this.roomId + '):';
+        console.log("Dispose Room");
     }
 
     updateWorld() {
@@ -115,8 +113,8 @@ export class PublicRoom extends Room<GameState> {
             var player = this.state.players[key];
             var newX = player.x + Math.cos(player.angle) * player.speed * WORLD_UPDATE_INTERVAL / 1000;
             var newY = player.y + Math.sin(player.angle) * player.speed * WORLD_UPDATE_INTERVAL / 1000;
-            if ((newX - player.radius) < 0) newX = player.radius; else if ((newX + player.radius) > this.state.mapSize.width) newX = this.state.mapSize.width - player.radius;
-            if ((newY - player.radius) < 0) newY = player.radius; else if ((newY + player.radius) > this.state.mapSize.height) newY = this.state.mapSize.height - player.radius;
+            if ((newX - player.radius) < 0) newX = player.radius; else if ((newX + player.radius) > 1200) newX = 1200 - player.radius;
+            if ((newY - player.radius) < 0) newY = player.radius; else if ((newY + player.radius) > 1200) newY = 1200 - player.radius;
             player.x = newX;
             player.y = newY;
 
@@ -150,10 +148,11 @@ export class PublicRoom extends Room<GameState> {
 
     generateFruit() {
         var fr: Fruit = new Fruit();
-        fr.x = FRUIT_RADIUS + Math.random() * (this.state.mapSize.width - 2 * FRUIT_RADIUS);
-        fr.y = FRUIT_RADIUS + Math.random() * (this.state.mapSize.height - 2 * FRUIT_RADIUS);
+        fr.x = FRUIT_RADIUS + Math.random() * (1200 - 2 * FRUIT_RADIUS);
+        fr.y = FRUIT_RADIUS + Math.random() * (1200 - 2 * FRUIT_RADIUS);
         fr.color = FRUIT_COLORS[Math.floor(Math.random() * FRUIT_COLORS.length)];
-        this.state.fruits[fruitId++] = fr;
+        var key = "fr_" + (fruitId++);
+        this.state.fruits[key] = fr;
     }
 
     checkIfPlayerIsEatingAnotherPlayer(clientId, player) {
@@ -171,8 +170,8 @@ export class PublicRoom extends Room<GameState> {
         var newSpeed = player.speed - player2.radius / 20;
         if (newSpeed > PLAYER_MIN_SPEED) player.speed = newSpeed;
         console.log('oh nooooo');
-        player2.x = Math.floor(Math.random() * this.state.mapSize.width);
-        player2.y = Math.floor(Math.random() * this.state.mapSize.height);
+        player2.x = Math.floor(Math.random() * 1200);
+        player2.y = Math.floor(Math.random() * 1200);
         player2.radius = PLAYER_INIT_RADIUS;
     }
 
