@@ -11,6 +11,9 @@ import com.badlogic.gdx.math.Vector3;
 import io.colyseus.Client;
 import io.colyseus.Room;
 import io.colyseus.serializer.schema.DataChange;
+import ir.doorbash.agar.io.classes.Fruit;
+import ir.doorbash.agar.io.classes.GameState;
+import ir.doorbash.agar.io.classes.Player;
 
 import java.util.LinkedHashMap;
 
