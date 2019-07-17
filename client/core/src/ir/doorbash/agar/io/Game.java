@@ -32,7 +32,7 @@ public class Game extends ApplicationAdapter {
     private int width = 600;
     private int height = 600;
     private Client client;
-    private Room<MyState> room;
+    private Room<GameState> room;
     private int lastAngle = -1000;
     private int mapWidth = 1200;
     private int mapHeight = 1200;
@@ -195,7 +195,7 @@ public class Game extends ApplicationAdapter {
         client = new Client(ENDPOINT, new Client.Listener() {
             @Override
             public void onOpen(String id) {
-                room = client.join("public", MyState.class);
+                room = client.join("public", GameState.class);
                 room.addListener(new Room.Listener() {
 
                     @Override
