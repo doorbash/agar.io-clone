@@ -8,6 +8,7 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Vector3;
+
 import io.colyseus.Client;
 import io.colyseus.Room;
 import io.colyseus.serializer.schema.DataChange;
@@ -19,31 +20,39 @@ import java.util.LinkedHashMap;
 
 public class Game extends ApplicationAdapter {
 
+    /* *************************************** CONSTANTS *****************************************/
+
     private static final String ENDPOINT = "ws://127.0.0.1:2560";
     private static final int NETWORK_UPDATE_INTERVAL = 200;
     private static final int CHECK_LATENCY_INTERVAL = 10000;
     private static final int GRID_SIZE = 60;
     private static final int FRUIT_RADIUS = 10;
-    private static final float LERP_MIN = 0.1f;
-    private static final float LERP_MAX = 0.5f;
     private static final int LATENCY_MIN = 100; // ms
     private static final int LATENCY_MAX = 500; // ms
+    private static final float LERP_MIN = 0.1f;
+    private static final float LERP_MAX = 0.5f;
     private static final float OTHER_PLAYERS_LERP = 0.5f;
 
-    private ShapeRenderer shapeRenderer;
-    private OrthographicCamera camera;
+    /* **************************************** FIELDS *******************************************/
+
     private int width = 600;
     private int height = 600;
-    private Client client;
-    private Room<GameState> room;
     private int lastAngle = -1000;
     private int mapWidth = 1200;
     private int mapHeight = 1200;
     private long lastNetworkUpdateTime;
     private long lastLatencyCheckTime;
+    private float lerp = LERP_MAX;
+
+    private ShapeRenderer shapeRenderer;
+    private OrthographicCamera camera;
+
+    private Client client;
+    private Room<GameState> room;
     private LinkedHashMap<String, Object> message;
     private FPSLogger fpsLogger;
-    private float lerp = LERP_MAX;
+
+    /* *************************************** OVERRIDE *****************************************/
 
     @Override
     public void create() {
@@ -97,17 +106,7 @@ public class Game extends ApplicationAdapter {
     public void resize(int width, int height) {
     }
 
-    private void updatePositions() {
-        if (room == null) return;
-        for (String clientId : room.getState().players.keys()) {
-            Player player = room.getState().players.get(clientId);
-            if (player == null) continue;
-            if (clientId.equals(client.getId()))
-                player.position.lerp(player.newPosition, lerp);
-            else
-                player.position.lerp(player.newPosition, OTHER_PLAYERS_LERP);
-        }
-    }
+    /* ***************************************** DRAW *******************************************/
 
     private void drawGrid() {
         Player player;
@@ -116,7 +115,7 @@ public class Game extends ApplicationAdapter {
         int rightTopX;
         int rightTopY;
 
-        if (room != null && (player = room.getState().players.get(client.getId())) != null) {
+        if (room != null && (player = room.state.players.get(client.getId())) != null) {
             leftBottomX = (int) (player.position.x - width / 2);
             leftBottomY = (int) (player.position.y - height / 2);
         } else {
@@ -148,30 +147,49 @@ public class Game extends ApplicationAdapter {
 
     private void drawFruits() {
         if (room == null) return;
-        Player thisPlayer = room.getState().players.get(client.getId());
-        if (thisPlayer == null) return;
-//        synchronized (room.getState().fruits) {
-            for (String fruitId : room.getState().fruits.keys()) {
-                Fruit fr = room.getState().fruits.get(fruitId);
+        Player thisPlayer = room.state.players.get(client.getId());
+        synchronized (room.state.fruits.lock) {
+            if (thisPlayer == null) return;
+            for (String fruitId : room.state.fruits.keys()) {
+                Fruit fr = room.state.fruits.get(fruitId);
                 if (fr == null) continue;
-                if (!objectIsInCurrentScreen(thisPlayer, fr.position.x, fr.position.y, FRUIT_RADIUS)) continue;
+                if (!objectIsInCurrentScreen(thisPlayer, fr.position.x, fr.position.y, FRUIT_RADIUS))
+                    continue;
                 shapeRenderer.setColor(fr._color);
                 shapeRenderer.circle(fr.position.x, fr.position.y, FRUIT_RADIUS);
             }
-//        }
+        }
     }
 
     private void drawPlayers() {
         if (room == null) return;
-        Player thisPlayer = room.getState().players.get(client.getId());
+        Player thisPlayer = room.state.players.get(client.getId());
         if (thisPlayer == null) return;
-        for (String id : room.getState().players.keys()) {
-            Player player = room.getState().players.get(id);
-            if (id.equals(client.getId()) || objectIsInCurrentScreen(thisPlayer, player.position.x, player.position.y, player.radius)) {
-                shapeRenderer.setColor(player._strokeColor);
-                shapeRenderer.circle(player.position.x, player.position.y, player.radius);
-                shapeRenderer.setColor(player._color);
-                shapeRenderer.circle(player.position.x, player.position.y, player.radius - 3);
+        synchronized (room.state.players.lock) {
+            for (String id : room.state.players.keys()) {
+                Player player = room.state.players.get(id);
+                if (id.equals(client.getId()) || objectIsInCurrentScreen(thisPlayer, player.position.x, player.position.y, player.radius)) {
+                    shapeRenderer.setColor(player._strokeColor);
+                    shapeRenderer.circle(player.position.x, player.position.y, player.radius);
+                    shapeRenderer.setColor(player._color);
+                    shapeRenderer.circle(player.position.x, player.position.y, player.radius - 3);
+                }
+            }
+        }
+    }
+
+    /* ***************************************** LOGIC *******************************************/
+
+    private void updatePositions() {
+        if (room == null) return;
+        synchronized (room.state.players.lock) {
+            for (String clientId : room.state.players.keys()) {
+                Player player = room.state.players.get(clientId);
+                if (player == null) continue;
+                if (clientId.equals(client.getId()))
+                    player.position.lerp(player.newPosition, lerp);
+                else
+                    player.position.lerp(player.newPosition, OTHER_PLAYERS_LERP);
             }
         }
     }
@@ -186,12 +204,14 @@ public class Game extends ApplicationAdapter {
 
     private void adjustCamera() {
         if (room == null) return;
-        Player player = room.getState().players.get(client.getId());
+        Player player = room.state.players.get(client.getId());
         if (player == null) return;
         camera.position.set(new Vector3(player.position.x, player.position.y, 0));
         camera.zoom = 1;
         camera.update();
     }
+
+    /* **************************************** NETWORK ******************************************/
 
     private void connectToServer() {
         System.out.println("connectToServer()");
@@ -211,7 +231,7 @@ public class Game extends ApplicationAdapter {
                     @Override
                     protected void onJoin() {
                         System.out.println("joined to room");
-                        room.getState().players.onAddListener = (player, key) -> {
+                        room.state.players.onAdd = (player, key) -> {
                             System.out.println("new player added >> clientId: " + key);
                             player.position.x = player.x;
                             player.position.y = player.y;
@@ -231,7 +251,7 @@ public class Game extends ApplicationAdapter {
                                 }
                             };
                         };
-                        room.getState().fruits.onAddListener = (fruit, key) -> {
+                        room.state.fruits.onAdd = (fruit, key) -> {
                             System.out.println("new fruit added >> key: " + key);
                             fruit.position.x = fruit.x;
                             fruit.position.y = fruit.y;
