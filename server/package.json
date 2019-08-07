@@ -10,7 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "@colyseus/monitor": "^0.10.0",
-    "colyseus": "^0.10.7",
+    "colyseus": "^0.10.9",
     "colyseus.js": "^0.10.2",
     "cors": "^2.8.5",
     "express": "^4.14.0",
