@@ -10,8 +10,6 @@ public class AndroidLauncher extends AndroidApplication {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        AndroidApplicationConfiguration config = new AndroidApplicationConfiguration();
-        config.resolutionStrategy = (widthMeasureSpec, heightMeasureSpec) -> new ResolutionStrategy.MeasuredDimension(heightMeasureSpec, heightMeasureSpec);
-        initialize(new Game(), config);
+        initialize(new Game());
     }
 }
