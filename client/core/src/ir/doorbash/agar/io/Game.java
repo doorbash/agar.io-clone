@@ -24,7 +24,7 @@ public class Game extends ApplicationAdapter {
 
     /* *************************************** CONSTANTS *****************************************/
 
-    private static final String ENDPOINT = "ws://192.168.1.134:2560";
+    private static final String ENDPOINT = "ws://127.0.0.1:2560";
     private static final int NETWORK_UPDATE_INTERVAL = 200;
     private static final int CHECK_LATENCY_INTERVAL = 10000;
     private static final int GRID_SIZE = 60;
