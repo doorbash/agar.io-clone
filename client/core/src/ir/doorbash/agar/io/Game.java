@@ -9,6 +9,10 @@ import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Vector3;
 
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import io.colyseus.Client;
 import io.colyseus.Room;
 import io.colyseus.serializer.schema.DataChange;
@@ -16,13 +20,11 @@ import ir.doorbash.agar.io.classes.Fruit;
 import ir.doorbash.agar.io.classes.GameState;
 import ir.doorbash.agar.io.classes.Player;
 
-import java.util.LinkedHashMap;
-
 public class Game extends ApplicationAdapter {
 
     /* *************************************** CONSTANTS *****************************************/
 
-    private static final String ENDPOINT = "ws://127.0.0.1:2560";
+    private static final String ENDPOINT = "ws://192.168.1.134:2560";
     private static final int NETWORK_UPDATE_INTERVAL = 200;
     private static final int CHECK_LATENCY_INTERVAL = 10000;
     private static final int GRID_SIZE = 60;
@@ -35,8 +37,6 @@ public class Game extends ApplicationAdapter {
 
     /* **************************************** FIELDS *******************************************/
 
-    private int width = 600;
-    private int height = 600;
     private int lastAngle = -1000;
     private int mapWidth = 1200;
     private int mapHeight = 1200;
@@ -51,6 +51,8 @@ public class Game extends ApplicationAdapter {
     private Room<GameState> room;
     private LinkedHashMap<String, Object> message;
     private FPSLogger fpsLogger;
+    private final HashMap<String, Fruit> fruits = new HashMap<>();
+    private final HashMap<String, Player> players = new HashMap<>();
 
     /* *************************************** OVERRIDE *****************************************/
 
@@ -58,7 +60,8 @@ public class Game extends ApplicationAdapter {
     public void create() {
         fpsLogger = new FPSLogger();
         shapeRenderer = new ShapeRenderer();
-        camera = new OrthographicCamera(width, height);
+        camera = new OrthographicCamera(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+        camera.update();
         message = new LinkedHashMap<>();
         message.put("op", "angle");
         connectToServer();
@@ -104,6 +107,9 @@ public class Game extends ApplicationAdapter {
 
     @Override
     public void resize(int width, int height) {
+        camera.viewportWidth = width;
+        camera.viewportHeight = height;
+        camera.update();
     }
 
     /* ***************************************** DRAW *******************************************/
@@ -116,17 +122,17 @@ public class Game extends ApplicationAdapter {
         int rightTopY;
 
         if (room != null && (player = room.state.players.get(client.getId())) != null) {
-            leftBottomX = (int) (player.position.x - width / 2);
-            leftBottomY = (int) (player.position.y - height / 2);
+            leftBottomX = (int) (player.position.x - camera.viewportWidth / 2);
+            leftBottomY = (int) (player.position.y - camera.viewportHeight / 2);
         } else {
-            leftBottomX = -width / 2;
-            leftBottomY = -height / 2;
+            leftBottomX = (int) (-camera.viewportWidth / 2);
+            leftBottomY = (int) (-camera.viewportHeight / 2);
         }
 
         leftBottomX -= leftBottomX % GRID_SIZE + GRID_SIZE;
         leftBottomY -= leftBottomY % GRID_SIZE + GRID_SIZE;
-        rightTopX = leftBottomX + width + 2 * GRID_SIZE;
-        rightTopY = leftBottomY + height + 2 * GRID_SIZE;
+        rightTopX = (int) (leftBottomX + camera.viewportWidth + 2 * GRID_SIZE);
+        rightTopY = (int) (leftBottomY + camera.viewportHeight + 2 * GRID_SIZE);
 
         shapeRenderer.setColor(Color.BLACK);
         for (int i = leftBottomX; i < rightTopX; i += GRID_SIZE) {
@@ -148,12 +154,11 @@ public class Game extends ApplicationAdapter {
     private void drawFruits() {
         if (room == null) return;
         Player thisPlayer = room.state.players.get(client.getId());
-        synchronized (room.state.fruits.lock) {
-            if (thisPlayer == null) return;
-            for (String fruitId : room.state.fruits.keys()) {
-                Fruit fr = room.state.fruits.get(fruitId);
+        if (thisPlayer == null) return;
+        synchronized (fruits) {
+            for (Fruit fr : fruits.values()) {
                 if (fr == null) continue;
-                if (!objectIsInCurrentScreen(thisPlayer, fr.position.x, fr.position.y, FRUIT_RADIUS))
+                if (!objectIsInViewport(thisPlayer, fr.position.x, fr.position.y, FRUIT_RADIUS))
                     continue;
                 shapeRenderer.setColor(fr._color);
                 shapeRenderer.circle(fr.position.x, fr.position.y, FRUIT_RADIUS);
@@ -165,10 +170,12 @@ public class Game extends ApplicationAdapter {
         if (room == null) return;
         Player thisPlayer = room.state.players.get(client.getId());
         if (thisPlayer == null) return;
-        synchronized (room.state.players.lock) {
-            for (String id : room.state.players.keys()) {
-                Player player = room.state.players.get(id);
-                if (id.equals(client.getId()) || objectIsInCurrentScreen(thisPlayer, player.position.x, player.position.y, player.radius)) {
+        synchronized (players) {
+            for (Map.Entry<String, Player> keyValue : players.entrySet()) {
+                String clientId = keyValue.getKey();
+                Player player = keyValue.getValue();
+                if (player == null) continue;
+                if (clientId.equals(client.getId()) || objectIsInViewport(thisPlayer, player.position.x, player.position.y, player.radius)) {
                     shapeRenderer.setColor(player._strokeColor);
                     shapeRenderer.circle(player.position.x, player.position.y, player.radius);
                     shapeRenderer.setColor(player._color);
@@ -182,9 +189,10 @@ public class Game extends ApplicationAdapter {
 
     private void updatePositions() {
         if (room == null) return;
-        synchronized (room.state.players.lock) {
-            for (String clientId : room.state.players.keys()) {
-                Player player = room.state.players.get(clientId);
+        synchronized (players) {
+            for (Map.Entry<String, Player> keyValue : players.entrySet()) {
+                String clientId = keyValue.getKey();
+                Player player = keyValue.getValue();
                 if (player == null) continue;
                 if (clientId.equals(client.getId()))
                     player.position.lerp(player.newPosition, lerp);
@@ -194,11 +202,11 @@ public class Game extends ApplicationAdapter {
         }
     }
 
-    private boolean objectIsInCurrentScreen(Player player, float x, float y, float radius) {
-        if (x + radius < player.position.x - width / 2) return false;
-        if (x - radius > player.position.x + width / 2) return false;
-        if (y + radius < player.position.y - height / 2) return false;
-        if (y - radius > player.position.y + height / 2) return false;
+    private boolean objectIsInViewport(Player player, float x, float y, float radius) {
+        if (x + radius < player.position.x - camera.viewportWidth / 2) return false;
+        if (x - radius > player.position.x + camera.viewportWidth / 2) return false;
+        if (y + radius < player.position.y - camera.viewportHeight / 2) return false;
+        if (y - radius > player.position.y + camera.viewportHeight / 2) return false;
         return true;
     }
 
@@ -232,6 +240,9 @@ public class Game extends ApplicationAdapter {
                     protected void onJoin() {
                         System.out.println("joined to room");
                         room.state.players.onAdd = (player, key) -> {
+                            synchronized (players) {
+                                players.put(key, player);
+                            }
                             System.out.println("new player added >> clientId: " + key);
                             player.position.x = player.x;
                             player.position.y = player.y;
@@ -251,11 +262,27 @@ public class Game extends ApplicationAdapter {
                                 }
                             };
                         };
+
+                        room.state.players.onRemove = (player, key) -> {
+                            synchronized (players) {
+                                players.remove(key);
+                            }
+                        };
+
                         room.state.fruits.onAdd = (fruit, key) -> {
+                            synchronized (fruits) {
+                                fruits.put(key, fruit);
+                            }
                             System.out.println("new fruit added >> key: " + key);
                             fruit.position.x = fruit.x;
                             fruit.position.y = fruit.y;
                             fruit._color = new Color(fruit.color);
+                        };
+
+                        room.state.fruits.onRemove = (fruit, key) -> {
+                            synchronized (fruits) {
+                                fruits.remove(key);
+                            }
                         };
                     }
                 });
@@ -286,8 +313,8 @@ public class Game extends ApplicationAdapter {
 
     private void networkUpdate() {
         if (room == null) return;
-        float dx = Gdx.input.getX() - width / 2;
-        float dy = Gdx.input.getY() - height / 2;
+        float dx = Gdx.input.getX() - camera.viewportWidth / 2;
+        float dy = Gdx.input.getY() - camera.viewportHeight / 2;
         int angle = (int) Math.toDegrees(Math.atan2(-dy, dx));
         if (lastAngle != angle) {
             message.put("angle", angle);
