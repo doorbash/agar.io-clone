@@ -140,7 +140,7 @@ export class PublicRoom extends Room {
     eat(player, fruitKey) {
         delete this.state.fruits[fruitKey];
         player.radius += FRUIT_RADIUS / 10;
-        var newSpeed = player.speed - FRUIT_RADIUS / 20;
+        var newSpeed = player.speed - FRUIT_RADIUS / 30;
         if (newSpeed > PLAYER_MIN_SPEED) player.speed = newSpeed;
         console.log('yum yum yummm');
         this.generateFruit();
