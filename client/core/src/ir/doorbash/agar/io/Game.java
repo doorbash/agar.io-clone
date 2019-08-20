@@ -121,18 +121,21 @@ public class Game extends ApplicationAdapter {
         int rightTopX;
         int rightTopY;
 
+        float width = camera.zoom * camera.viewportWidth;
+        float height = camera.zoom * camera.viewportHeight;
+
         if (room != null && (player = room.state.players.get(client.getId())) != null) {
-            leftBottomX = (int) (player.position.x - camera.viewportWidth / 2);
-            leftBottomY = (int) (player.position.y - camera.viewportHeight / 2);
+            leftBottomX = (int) (player.position.x - width / 2f);
+            leftBottomY = (int) (player.position.y - height / 2f);
         } else {
-            leftBottomX = (int) (-camera.viewportWidth / 2);
-            leftBottomY = (int) (-camera.viewportHeight / 2);
+            leftBottomX = (int) (-width/ 2f);
+            leftBottomY = (int) (-height / 2f);
         }
 
         leftBottomX -= leftBottomX % GRID_SIZE + GRID_SIZE;
         leftBottomY -= leftBottomY % GRID_SIZE + GRID_SIZE;
-        rightTopX = (int) (leftBottomX + camera.viewportWidth + 2 * GRID_SIZE);
-        rightTopY = (int) (leftBottomY + camera.viewportHeight + 2 * GRID_SIZE);
+        rightTopX = (int) (leftBottomX + width + 2 * GRID_SIZE);
+        rightTopY = (int) (leftBottomY + height + 2 * GRID_SIZE);
 
         shapeRenderer.setColor(Color.BLACK);
         for (int i = leftBottomX; i < rightTopX; i += GRID_SIZE) {
@@ -214,8 +217,9 @@ public class Game extends ApplicationAdapter {
         if (room == null) return;
         Player player = room.state.players.get(client.getId());
         if (player == null) return;
-        camera.position.set(new Vector3(player.position.x, player.position.y, 0));
-        camera.zoom = 1;
+        camera.position.x = player.position.x;
+        camera.position.y = player.position.y;
+        camera.zoom = player.radius / 60f;
         camera.update();
     }
 
