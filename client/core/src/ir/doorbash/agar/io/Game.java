@@ -206,10 +206,10 @@ public class Game extends ApplicationAdapter {
     }
 
     private boolean objectIsInViewport(Player player, float x, float y, float radius) {
-        if (x + radius < player.position.x - camera.viewportWidth / 2) return false;
-        if (x - radius > player.position.x + camera.viewportWidth / 2) return false;
-        if (y + radius < player.position.y - camera.viewportHeight / 2) return false;
-        if (y - radius > player.position.y + camera.viewportHeight / 2) return false;
+        if (x + radius < player.position.x - camera.zoom * camera.viewportWidth / 2) return false;
+        if (x - radius > player.position.x + camera.zoom * camera.viewportWidth / 2) return false;
+        if (y + radius < player.position.y - camera.zoom * camera.viewportHeight / 2) return false;
+        if (y - radius > player.position.y + camera.zoom * camera.viewportHeight / 2) return false;
         return true;
     }
 
