@@ -1,5 +1,6 @@
 import { Schema, type, ArraySchema, MapSchema } from "@colyseus/schema"
 import { Room, Client } from "colyseus"
+import { IncomingMessage } from "http"
 
 const PLAYER_COLORS: number[] = [
     0x4cb050FF,
@@ -62,35 +63,14 @@ class GameState extends Schema {
 
 export class PublicRoom extends Room {
 
+    /* ********************************** FIELDS ********************************** */
+
     maxClients = 20;
     autoDispose = true;
 
-    onInit(options) {
-        this.setState(new GameState());
+    /* ********************************* OVERRIDE ********************************* */
 
-        for (var i = 0; i < INIT_FRUITS; i++)
-            this.generateFruit();
-
-        this.setSimulationInterval(() => {
-            this.updateWorld();
-        }, WORLD_UPDATE_INTERVAL);
-    }
-
-    onJoin?(client: Client, options?: any, auth?: any): void | Promise<any> {
-        console.log('onJoin(', client.id, ')', options);
-        var player: Player = new Player();
-        player.x = Math.floor(Math.random() * 1200);
-        player.y = Math.floor(Math.random() * 1200);
-        player.color = PLAYER_COLORS[Math.floor(Math.random() * PLAYER_COLORS.length)];
-        this.state.players[client.id] = player;
-    }
-
-    onLeave(client) {
-        console.log("onLeave(" + client.sessionId + ")");
-        delete this.state.players[client.id];
-    }
-
-    onMessage(client, data) {
+    onMessage(client: Client, data: any): void {
         console.log("Room received message from", client.id, ":", data);
         var player = this.state.players[client.id];
         switch (data.op) {
@@ -103,9 +83,41 @@ export class PublicRoom extends Room {
         }
     }
 
-    onDispose() {
+    onCreate?(options: any): void {
+        this.setState(new GameState());
+
+        for (var i = 0; i < INIT_FRUITS; i++)
+            this.generateFruit();
+
+        this.setSimulationInterval(() => {
+            this.updateWorld();
+        }, WORLD_UPDATE_INTERVAL);
+    }
+
+    onAuth?(client: Client, options: any, request?: IncomingMessage): any | Promise<any> {
+        console.log("onAuth(" + client.id + ")");
+    }
+
+    onJoin?(client: Client, options?: any, auth?: any): void | Promise<any> {
+        console.log(" >>>> " + client.id + " " + client.id)
+        console.log('onJoin(', client.id, ')', options);
+        var player: Player = new Player();
+        player.x = Math.floor(Math.random() * 1200);
+        player.y = Math.floor(Math.random() * 1200);
+        player.color = PLAYER_COLORS[Math.floor(Math.random() * PLAYER_COLORS.length)];
+        this.state.players[client.id] = player;
+    }
+
+    async onLeave?(client: Client, consented?: boolean): Promise<any> {
+        console.log("onLeave(" + client.id + ")");
+        await this.allowReconnection(client, 10);
+    }
+
+    onDispose?(): void | Promise<any> {
         console.log("Dispose Room");
     }
+
+    /* ********************************* LOGIC ********************************* */
 
     updateWorld() {
         Object.keys(this.state.players).forEach(key => {
