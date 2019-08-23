@@ -28,7 +28,6 @@ public class Player extends Schema {
 	public int color = 0;
 
 	public Vector2 position = new Vector2();
-	public Vector2 newPosition = new Vector2();
 	public Color _color;
 	public Color _strokeColor;
 }
