@@ -3,18 +3,21 @@ package ir.doorbash.agar.io;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.FPSLogger;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.MathUtils;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.Map.Entry;
 
 import io.colyseus.Client;
+import io.colyseus.Client.MatchMakeException;
 import io.colyseus.Room;
-import io.colyseus.serializer.schema.Change;
 import ir.doorbash.agar.io.classes.Fruit;
 import ir.doorbash.agar.io.classes.GameState;
 import ir.doorbash.agar.io.classes.Player;
@@ -24,31 +27,46 @@ public class Game extends ApplicationAdapter {
     /* *************************************** CONSTANTS *****************************************/
 
     private static final String ENDPOINT = "ws://127.0.0.1:2560";
-    private static final int NETWORK_UPDATE_INTERVAL = 200;
-    private static final int CHECK_LATENCY_INTERVAL = 10000;
+    private static final String PATH_FONT_NOTO = "fonts/NotoSans-Regular.ttf";
+    private static final int SEND_DIRECTION_INTERVAL = 200;
+    private static final int PING_INTERVAL = 5000;
+    private static final int CHECK_CONNECTION_INTERVAL = 3000;
     private static final int GRID_SIZE = 60;
     private static final int FRUIT_RADIUS = 10;
     private static final int LATENCY_MIN = 100; // ms
     private static final int LATENCY_MAX = 500; // ms
+    private static final int CONNECTION_STATE_DISCONNECTED = 0;
+    private static final int CONNECTION_STATE_CONNECTING = 1;
+    private static final int CONNECTION_STATE_CONNECTED = 2;
     private static final float LERP_MIN = 0.1f;
     private static final float LERP_MAX = 0.5f;
     private static final float OTHER_PLAYERS_LERP = 0.5f;
 
     /* **************************************** FIELDS *******************************************/
 
+    private int connectionState = CONNECTION_STATE_DISCONNECTED;
     private int lastAngle = -1000;
     private int mapWidth = 1200;
     private int mapHeight = 1200;
-    private long lastNetworkUpdateTime;
-    private long lastLatencyCheckTime;
+    private long lastSendDirectionTime;
+    private long lastPingSentTime;
+    private long lastPingReplyTime;
+    private long currentPing = -1;
+    private long lastConnectionCheckTime;
     private float lerp = LERP_MAX;
 
+    private String sessionId;
+    private String roomId;
+
+    private SpriteBatch batch;
     private ShapeRenderer shapeRenderer;
     private OrthographicCamera camera;
+    private OrthographicCamera guiCamera;
+    private FreeTypeFontGenerator freetypeGeneratorNoto;
+    private BitmapFont logFont;
 
     private Room<GameState> room;
     private LinkedHashMap<String, Object> message;
-    private FPSLogger fpsLogger;
     private final HashMap<String, Fruit> fruits = new HashMap<>();
     private final HashMap<String, Player> players = new HashMap<>();
 
@@ -56,13 +74,22 @@ public class Game extends ApplicationAdapter {
 
     @Override
     public void create() {
-        fpsLogger = new FPSLogger();
+        batch = new SpriteBatch();
         shapeRenderer = new ShapeRenderer();
         camera = new OrthographicCamera(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         camera.update();
+        guiCamera = new OrthographicCamera(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+        guiCamera.update();
         message = new LinkedHashMap<>();
         message.put("op", "angle");
-        connectToServer();
+
+        freetypeGeneratorNoto = new FreeTypeFontGenerator(Gdx.files.internal(PATH_FONT_NOTO));
+        FreeTypeFontGenerator.FreeTypeFontParameter logFontParams = new FreeTypeFontGenerator.FreeTypeFontParameter();
+        logFontParams.size = 14;
+        logFontParams.color = Color.BLACK;
+        logFontParams.flip = false;
+        logFontParams.incremental = true;
+        logFont = freetypeGeneratorNoto.generateFont(logFontParams);
     }
 
     @Override
@@ -77,28 +104,42 @@ public class Game extends ApplicationAdapter {
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
         adjustCamera();
-        shapeRenderer.setProjectionMatrix(camera.combined);
 
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        drawGrid();
-        drawFruits();
-        drawPlayers();
-        shapeRenderer.end();
+        if (connectionState == CONNECTION_STATE_CONNECTED) {
+            shapeRenderer.setProjectionMatrix(camera.combined);
+            shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+            drawGrid();
+            drawFruits();
+            drawPlayers();
+            shapeRenderer.end();
+
+            batch.setProjectionMatrix(guiCamera.combined);
+            batch.begin();
+            drawPing();
+            batch.end();
+        }
 
         long now = System.currentTimeMillis();
-        if (now - lastNetworkUpdateTime >= NETWORK_UPDATE_INTERVAL) {
-            lastNetworkUpdateTime = now;
-            networkUpdate();
+        if (now - lastSendDirectionTime >= SEND_DIRECTION_INTERVAL) {
+            lastSendDirectionTime = now;
+            sendDirection();
         }
-        if (now - lastLatencyCheckTime >= CHECK_LATENCY_INTERVAL) {
-            lastLatencyCheckTime = now;
-            checkLatency();
+        if (now - lastPingSentTime >= PING_INTERVAL) {
+            lastPingSentTime = now;
+            sendPing();
+        }
+        if (now - lastConnectionCheckTime >= CHECK_CONNECTION_INTERVAL) {
+            lastConnectionCheckTime = now;
+            checkConnection();
         }
     }
 
     @Override
     public void dispose() {
-        shapeRenderer.dispose();
+        if (logFont != null) logFont.dispose();
+        if (batch != null) batch.dispose();
+        if (shapeRenderer != null) shapeRenderer.dispose();
+        if (freetypeGeneratorNoto != null) freetypeGeneratorNoto.dispose();
         if (room != null) room.leave();
     }
 
@@ -107,6 +148,9 @@ public class Game extends ApplicationAdapter {
         camera.viewportWidth = width;
         camera.viewportHeight = height;
         camera.update();
+        guiCamera.viewportWidth = width;
+        guiCamera.viewportHeight = height;
+        guiCamera.update();
     }
 
     /* ***************************************** DRAW *******************************************/
@@ -157,7 +201,7 @@ public class Game extends ApplicationAdapter {
         if (thisPlayer == null) return;
         synchronized (fruits) {
             for (Fruit fr : fruits.values()) {
-                if (fr == null) continue;
+                if (fr == null || fr._color == null) continue;
                 if (!objectIsInViewport(thisPlayer, fr.position.x, fr.position.y, FRUIT_RADIUS))
                     continue;
                 shapeRenderer.setColor(fr._color);
@@ -171,7 +215,7 @@ public class Game extends ApplicationAdapter {
         Player thisPlayer = room.state.players.get(room.getSessionId());
         if (thisPlayer == null) return;
         synchronized (players) {
-            for (Map.Entry<String, Player> keyValue : players.entrySet()) {
+            for (Entry<String, Player> keyValue : players.entrySet()) {
                 String clientId = keyValue.getKey();
                 Player player = keyValue.getValue();
                 if (player == null) continue;
@@ -185,19 +229,27 @@ public class Game extends ApplicationAdapter {
         }
     }
 
+    private void drawPing() {
+        String logText = "fps: " + Gdx.graphics.getFramesPerSecond();
+        if (currentPing >= 0) {
+            logText += " - ping: " + currentPing;
+        }
+        logFont.draw(batch, logText, -guiCamera.viewportWidth / 2f + 8, -guiCamera.viewportHeight / 2f + 2 + logFont.getLineHeight());
+    }
+
     /* ***************************************** LOGIC *******************************************/
 
     private void updatePositions() {
         if (room == null) return;
         synchronized (players) {
-            for (Map.Entry<String, Player> keyValue : players.entrySet()) {
+            for (Entry<String, Player> keyValue : players.entrySet()) {
                 String clientId = keyValue.getKey();
                 Player player = keyValue.getValue();
                 if (player == null) continue;
                 if (clientId.equals(room.getSessionId()))
-                    player.position.lerp(player.newPosition, lerp);
+                    player.position.set(MathUtils.lerp(player.position.x, player.x, lerp), MathUtils.lerp(player.position.y, player.y, lerp));
                 else
-                    player.position.lerp(player.newPosition, OTHER_PLAYERS_LERP);
+                    player.position.set(MathUtils.lerp(player.position.x, player.x, OTHER_PLAYERS_LERP), MathUtils.lerp(player.position.y, player.y, OTHER_PLAYERS_LERP));
             }
         }
     }
@@ -222,62 +274,119 @@ public class Game extends ApplicationAdapter {
 
     /* **************************************** NETWORK ******************************************/
 
-    private void connectToServer() {
-        System.out.println("connectToServer()");
+    private void checkConnection() {
+        if (connectionState == CONNECTION_STATE_CONNECTED && lastPingReplyTime > 0 && System.currentTimeMillis() - lastPingReplyTime > 15000) {
+            connectionState = CONNECTION_STATE_DISCONNECTED;
+        }
 
-        Client client = new Client(ENDPOINT);
-        client.joinOrCreate("public", GameState.class, room -> {
-            this.room = room;
-            System.out.println("joined to room");
-            room.state.players.onAdd = (player, key) -> {
-                synchronized (players) {
-                    players.put(key, player);
-                }
-                System.out.println("new player added >> clientId: " + key);
-                player.position.x = player.x;
-                player.position.y = player.y;
-                player._color = new Color(player.color);
-                player._strokeColor = new Color(player.color);
-                player._strokeColor.mul(0.9f);
-                player.onChange = changes -> {
-                    for (Change change : changes) {
-                        switch (change.field) {
-                            case "x":
-                                player.newPosition.x = (float) change.value;
-                                break;
-                            case "y":
-                                player.newPosition.y = (float) change.value;
-                                break;
-                        }
-                    }
-                };
-            };
-
-            room.state.players.onRemove = (player, key) -> {
-                synchronized (players) {
-                    players.remove(key);
-                }
-            };
-
-            room.state.fruits.onAdd = (fruit, key) -> {
-                synchronized (fruits) {
-                    fruits.put(key, fruit);
-                }
-                System.out.println("new fruit added >> key: " + key);
-                fruit.position.x = fruit.x;
-                fruit.position.y = fruit.y;
-                fruit._color = new Color(fruit.color);
-            };
-
-            room.state.fruits.onRemove = (fruit, key) -> {
-                synchronized (fruits) {
-                    fruits.remove(key);
-                }
-            };
-        }, Throwable::printStackTrace);
+        if (connectionState == CONNECTION_STATE_DISCONNECTED) {
+            connectToServer();
+        }
     }
 
-    private void networkUpdate() {
+    private void connectToServer() {
+        System.out.println("connectToServer()");
+        if (connectionState != CONNECTION_STATE_DISCONNECTED) return;
+        connectionState = CONNECTION_STATE_CONNECTING;
+        Client client = new Client(ENDPOINT);
+
+        if (sessionId == null) {
+            client.joinOrCreate("public", GameState.class, this::updateRoom, e -> {
+                e.printStackTrace();
+                connectionState = CONNECTION_STATE_DISCONNECTED;
+            });
+        } else {
+            client.reconnect(roomId, sessionId, GameState.class, this::updateRoom, e -> {
+                if (e instanceof MatchMakeException) {
+                    this.roomId = null;
+                    this.sessionId = null;
+                }
+                e.printStackTrace();
+                connectionState = CONNECTION_STATE_DISCONNECTED;
+            });
+        }
+    }
+
+    private void updateRoom(Room<GameState> room) {
+        this.room = room;
+        this.roomId = room.getId();
+        this.sessionId = room.getSessionId();
+        System.out.println("joined chat");
+
+        synchronized (players) {
+            players.clear();
+        }
+        synchronized (fruits) {
+            fruits.clear();
+        }
+
+        connectionState = CONNECTION_STATE_CONNECTED;
+        lastPingReplyTime = 0;
+
+        room.setListener(new Room.Listener() {
+
+            @Override
+            protected void onLeave() {
+                System.out.println("left chat");
+                connectionState = CONNECTION_STATE_DISCONNECTED;
+            }
+
+            @Override
+            protected void onError(Exception e) {
+                connectionState = CONNECTION_STATE_DISCONNECTED;
+                System.out.println("onError()");
+                e.printStackTrace();
+            }
+
+            @Override
+            protected void onMessage(Object message) {
+                if (message.equals("pong")) {
+                    lastPingReplyTime = System.currentTimeMillis();
+                    currentPing = lastPingReplyTime - lastPingSentTime;
+                    calculateLerp(currentPing);
+                }
+            }
+        });
+        room.state.players.onAdd = (player, key) -> {
+            if (connectionState != CONNECTION_STATE_CONNECTED) return;
+            synchronized (players) {
+                players.put(key, player);
+            }
+//            System.out.println("new player added >> clientId: " + key);
+            player.position.x = player.x;
+            player.position.y = player.y;
+            player._color = new Color(player.color);
+            player._strokeColor = new Color(player.color);
+            player._strokeColor.mul(0.9f);
+        };
+
+        room.state.players.onRemove = (player, key) -> {
+            if (connectionState != CONNECTION_STATE_CONNECTED) return;
+            synchronized (players) {
+                players.remove(key);
+            }
+        };
+
+        room.state.fruits.onAdd = (fruit, key) -> {
+            if (connectionState != CONNECTION_STATE_CONNECTED) return;
+            synchronized (fruits) {
+                fruits.put(key, fruit);
+            }
+//            System.out.println("new fruit added >> key: " + key);
+            fruit.position.x = fruit.x;
+            fruit.position.y = fruit.y;
+            fruit._color = new Color(fruit.color);
+        };
+
+        room.state.fruits.onRemove = (fruit, key) -> {
+            if (connectionState != CONNECTION_STATE_CONNECTED) return;
+            synchronized (fruits) {
+                fruits.remove(key);
+            }
+        };
+    }
+
+    private void sendDirection() {
         if (room == null) return;
         float dx = Gdx.input.getX() - camera.viewportWidth / 2;
         float dy = Gdx.input.getY() - camera.viewportHeight / 2;
@@ -289,7 +398,7 @@ public class Game extends ApplicationAdapter {
         }
     }
 
-    private void checkLatency() {
+    private void sendPing() {
         if (room == null) return;
         LinkedHashMap<String, Object> data = new LinkedHashMap<>();
         data.put("op", "ping");
