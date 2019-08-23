@@ -40,6 +40,7 @@ class Player extends Schema {
 
     speed: number = PLAYER_INIT_SPEED;
     angle = Math.PI * (Math.random() * 2 - 1);
+    online: boolean;
 }
 
 class Fruit extends Schema {
@@ -70,19 +71,6 @@ export class PublicRoom extends Room {
 
     /* ********************************* OVERRIDE ********************************* */
 
-    onMessage(client: Client, data: any): void {
-        console.log("Room received message from", client.id, ":", data);
-        var player = this.state.players[client.id];
-        switch (data.op) {
-            case 'angle': {
-                player.angle = data.angle * 0.0174533;
-            } break;
-            case 'ping': {
-                this.send(client, 'pong');
-            } break;
-        }
-    }
-
     onCreate?(options: any): void {
         this.setState(new GameState());
 
@@ -99,18 +87,49 @@ export class PublicRoom extends Room {
     }
 
     onJoin?(client: Client, options?: any, auth?: any): void | Promise<any> {
-        console.log(" >>>> " + client.id + " " + client.id)
         console.log('onJoin(', client.id, ')', options);
-        var player: Player = new Player();
-        player.x = Math.floor(Math.random() * 1200);
-        player.y = Math.floor(Math.random() * 1200);
-        player.color = PLAYER_COLORS[Math.floor(Math.random() * PLAYER_COLORS.length)];
-        this.state.players[client.id] = player;
+        if (!this.state.players[client.id]) {
+            var player: Player = new Player();
+            player.x = Math.floor(Math.random() * 1200);
+            player.y = Math.floor(Math.random() * 1200);
+            player.color = PLAYER_COLORS[Math.floor(Math.random() * PLAYER_COLORS.length)];
+            player.online = true;
+            this.state.players[client.id] = player;
+            console.log("new player added " + client.id);
+        }
+    }
+
+    onMessage(client: Client, data: any): void {
+        console.log("Room received message from", client.id, ":", data);
+        var player = this.state.players[client.id];
+        switch (data.op) {
+            case 'angle': {
+                player.angle = data.angle * 0.0174533;
+            } break;
+            case 'ping': {
+                this.send(client, 'pong');
+            } break;
+        }
     }
 
     async onLeave?(client: Client, consented?: boolean): Promise<any> {
         console.log("onLeave(" + client.id + ")");
-        await this.allowReconnection(client, 10);
+        let player = this.state.players[client.id];
+        if(!player) return;
+        player.online = false;
+        try {
+            if (consented) {
+                throw new Error("consented leave");
+            }
+            console.log("await this.allowReconnection(client, 30);")
+            await this.allowReconnection(client, 30);
+            player.online = true;
+            console.log("player " + client.id + " is back! player.online = true;")
+        } catch (e) {
+            if(player && !player.online) {
+                delete this.state.players[client.id];
+            }
+        }
     }
 
     onDispose?(): void | Promise<any> {
