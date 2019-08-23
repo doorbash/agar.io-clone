@@ -1,23 +1,18 @@
 import * as express from 'express';
-import { createServer } from 'http';
-import { Server } from 'colyseus';
 
-// Import demo room handlers
-import { PublicRoom } from "./rooms/public"
-
+import { Server } from "colyseus";
+import { createServer } from "http";
+import { PublicRoom } from './rooms/public';
 const port = 2560
-const app = express()
 
-// Attach WebSocket Server on HTTP Server.
+const app = express();
+app.use(express.json());
+
 const gameServer = new Server({
-  server: createServer(app)
+  server: createServer(app),
+  express: app,
 });
 
-gameServer.register("public", PublicRoom);
+gameServer.define("public", PublicRoom);
 
-gameServer.onShutdown(function () {
-  console.log(`game server is going down.`);
-});
-
-gameServer.listen(port, '0.0.0.0');
-console.log(`Listening on http://localhost:${port}`);
+gameServer.listen(port);

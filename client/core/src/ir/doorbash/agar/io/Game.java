@@ -7,7 +7,6 @@ import com.badlogic.gdx.graphics.FPSLogger;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
-import com.badlogic.gdx.math.Vector3;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -15,7 +14,7 @@ import java.util.Map;
 
 import io.colyseus.Client;
 import io.colyseus.Room;
-import io.colyseus.serializer.schema.DataChange;
+import io.colyseus.serializer.schema.Change;
 import ir.doorbash.agar.io.classes.Fruit;
 import ir.doorbash.agar.io.classes.GameState;
 import ir.doorbash.agar.io.classes.Player;
@@ -47,7 +46,6 @@ public class Game extends ApplicationAdapter {
     private ShapeRenderer shapeRenderer;
     private OrthographicCamera camera;
 
-    private Client client;
     private Room<GameState> room;
     private LinkedHashMap<String, Object> message;
     private FPSLogger fpsLogger;
@@ -102,7 +100,6 @@ public class Game extends ApplicationAdapter {
     public void dispose() {
         shapeRenderer.dispose();
         if (room != null) room.leave();
-        if (client != null) client.close();
     }
 
     @Override
@@ -124,11 +121,11 @@ public class Game extends ApplicationAdapter {
         float width = camera.zoom * camera.viewportWidth;
         float height = camera.zoom * camera.viewportHeight;
 
-        if (room != null && (player = room.state.players.get(client.getId())) != null) {
+        if (room != null && (player = room.state.players.get(room.getSessionId())) != null) {
             leftBottomX = (int) (player.position.x - width / 2f);
             leftBottomY = (int) (player.position.y - height / 2f);
         } else {
-            leftBottomX = (int) (-width/ 2f);
+            leftBottomX = (int) (-width / 2f);
             leftBottomY = (int) (-height / 2f);
         }
 
@@ -156,7 +153,7 @@ public class Game extends ApplicationAdapter {
 
     private void drawFruits() {
         if (room == null) return;
-        Player thisPlayer = room.state.players.get(client.getId());
+        Player thisPlayer = room.state.players.get(room.getSessionId());
         if (thisPlayer == null) return;
         synchronized (fruits) {
             for (Fruit fr : fruits.values()) {
@@ -171,14 +168,14 @@ public class Game extends ApplicationAdapter {
 
     private void drawPlayers() {
         if (room == null) return;
-        Player thisPlayer = room.state.players.get(client.getId());
+        Player thisPlayer = room.state.players.get(room.getSessionId());
         if (thisPlayer == null) return;
         synchronized (players) {
             for (Map.Entry<String, Player> keyValue : players.entrySet()) {
                 String clientId = keyValue.getKey();
                 Player player = keyValue.getValue();
                 if (player == null) continue;
-                if (clientId.equals(client.getId()) || objectIsInViewport(thisPlayer, player.position.x, player.position.y, player.radius)) {
+                if (clientId.equals(room.getSessionId()) || objectIsInViewport(thisPlayer, player.position.x, player.position.y, player.radius)) {
                     shapeRenderer.setColor(player._strokeColor);
                     shapeRenderer.circle(player.position.x, player.position.y, player.radius);
                     shapeRenderer.setColor(player._color);
@@ -197,7 +194,7 @@ public class Game extends ApplicationAdapter {
                 String clientId = keyValue.getKey();
                 Player player = keyValue.getValue();
                 if (player == null) continue;
-                if (clientId.equals(client.getId()))
+                if (clientId.equals(room.getSessionId()))
                     player.position.lerp(player.newPosition, lerp);
                 else
                     player.position.lerp(player.newPosition, OTHER_PLAYERS_LERP);
@@ -215,7 +212,7 @@ public class Game extends ApplicationAdapter {
 
     private void adjustCamera() {
         if (room == null) return;
-        Player player = room.state.players.get(client.getId());
+        Player player = room.state.players.get(room.getSessionId());
         if (player == null) return;
         camera.position.x = player.position.x;
         camera.position.y = player.position.y;
@@ -227,92 +224,57 @@ public class Game extends ApplicationAdapter {
 
     private void connectToServer() {
         System.out.println("connectToServer()");
-        client = new Client(ENDPOINT, new Client.Listener() {
-            @Override
-            public void onOpen(String id) {
-                room = client.join("public", GameState.class);
-                room.addListener(new Room.Listener() {
 
-                    @Override
-                    protected void onMessage(Object message) {
-                        if (message.equals("pong")) {
-                            calculateLerp(System.currentTimeMillis() - lastLatencyCheckTime);
+        Client client = new Client(ENDPOINT);
+        client.joinOrCreate("public", GameState.class, room -> {
+            this.room = room;
+            System.out.println("joined to room");
+            room.state.players.onAdd = (player, key) -> {
+                synchronized (players) {
+                    players.put(key, player);
+                }
+                System.out.println("new player added >> clientId: " + key);
+                player.position.x = player.x;
+                player.position.y = player.y;
+                player._color = new Color(player.color);
+                player._strokeColor = new Color(player.color);
+                player._strokeColor.mul(0.9f);
+                player.onChange = changes -> {
+                    for (Change change : changes) {
+                        switch (change.field) {
+                            case "x":
+                                player.newPosition.x = (float) change.value;
+                                break;
+                            case "y":
+                                player.newPosition.y = (float) change.value;
+                                break;
                         }
                     }
+                };
+            };
 
-                    @Override
-                    protected void onJoin() {
-                        System.out.println("joined to room");
-                        room.state.players.onAdd = (player, key) -> {
-                            synchronized (players) {
-                                players.put(key, player);
-                            }
-                            System.out.println("new player added >> clientId: " + key);
-                            player.position.x = player.x;
-                            player.position.y = player.y;
-                            player._color = new Color(player.color);
-                            player._strokeColor = new Color(player.color);
-                            player._strokeColor.mul(0.9f);
-                            player.onChange = changes -> {
-                                for (DataChange change : changes) {
-                                    switch (change.field) {
-                                        case "x":
-                                            player.newPosition.x = (float) change.value;
-                                            break;
-                                        case "y":
-                                            player.newPosition.y = (float) change.value;
-                                            break;
-                                    }
-                                }
-                            };
-                        };
-
-                        room.state.players.onRemove = (player, key) -> {
-                            synchronized (players) {
-                                players.remove(key);
-                            }
-                        };
-
-                        room.state.fruits.onAdd = (fruit, key) -> {
-                            synchronized (fruits) {
-                                fruits.put(key, fruit);
-                            }
-                            System.out.println("new fruit added >> key: " + key);
-                            fruit.position.x = fruit.x;
-                            fruit.position.y = fruit.y;
-                            fruit._color = new Color(fruit.color);
-                        };
-
-                        room.state.fruits.onRemove = (fruit, key) -> {
-                            synchronized (fruits) {
-                                fruits.remove(key);
-                            }
-                        };
-                    }
-                });
-            }
-
-            @Override
-            public void onMessage(Object o) {
-                System.out.println(o);
-            }
-
-            @Override
-            public void onClose(int i, String s, boolean b) {
-                System.out.println("Client.onClose()");
-                try {
-                    Thread.sleep(2000);
-                    connectToServer();
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+            room.state.players.onRemove = (player, key) -> {
+                synchronized (players) {
+                    players.remove(key);
                 }
-            }
+            };
 
-            @Override
-            public void onError(Exception e) {
-                e.printStackTrace();
-            }
-        });
+            room.state.fruits.onAdd = (fruit, key) -> {
+                synchronized (fruits) {
+                    fruits.put(key, fruit);
+                }
+                System.out.println("new fruit added >> key: " + key);
+                fruit.position.x = fruit.x;
+                fruit.position.y = fruit.y;
+                fruit._color = new Color(fruit.color);
+            };
+
+            room.state.fruits.onRemove = (fruit, key) -> {
+                synchronized (fruits) {
+                    fruits.remove(key);
+                }
+            };
+        }, Throwable::printStackTrace);
     }
 
     private void networkUpdate() {
