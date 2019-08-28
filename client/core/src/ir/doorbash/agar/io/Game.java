@@ -326,9 +326,14 @@ public class Game extends ApplicationAdapter {
         room.setListener(new Room.Listener() {
 
             @Override
-            protected void onLeave() {
-                System.out.println("left chat");
-                connectionState = CONNECTION_STATE_DISCONNECTED;
+            protected void onLeave(int code) {
+                System.out.println("left public, code = " + code);
+                if (code > 1000) {
+                    // abnormal disconnection!
+                    connectionState = CONNECTION_STATE_DISCONNECTED;
+                } else {
+                    // the client has initiated the disconnection
+                }
             }
 
             @Override
