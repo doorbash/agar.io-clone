@@ -13,5 +13,5 @@ eclipse.project {
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
-    implementation 'ir.doorbash:colyseus-java:2.3.1'
+    implementation 'ir.doorbash:colyseus-java:2.3.3'
 }
