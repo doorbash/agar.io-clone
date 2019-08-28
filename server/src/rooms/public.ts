@@ -82,8 +82,9 @@ export class PublicRoom extends Room {
         }, WORLD_UPDATE_INTERVAL);
     }
 
-    onAuth?(client: Client, options: any, request?: IncomingMessage): any | Promise<any> {
+    onAuth(client: Client, options: any, request?: IncomingMessage): any | Promise<any> {
         console.log("onAuth(" + client.id + ")");
+        return true;
     }
 
     onJoin?(client: Client, options?: any, auth?: any): void | Promise<any> {
