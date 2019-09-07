@@ -94,10 +94,10 @@ public class Game extends ApplicationAdapter {
 
     @Override
     public void render() {
-        updatePositions();
         Gdx.gl.glClearColor(0.98f, 0.99f, 1, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
+        updatePositions();
         adjustCamera();
 
         if (connectionState == CONNECTION_STATE_CONNECTED) {
