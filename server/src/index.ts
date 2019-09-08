@@ -1,8 +1,8 @@
 import * as express from 'express';
-
 import { Server } from "colyseus";
 import { createServer } from "http";
-import { PublicRoom } from './rooms/public';
+import FreeForAll from './rooms/FreeForAll';
+
 const port = 2560
 
 const app = express();
@@ -13,6 +13,6 @@ const gameServer = new Server({
   express: app,
 });
 
-gameServer.define("public", PublicRoom);
+gameServer.define("ffa", FreeForAll);
 
 gameServer.listen(port);

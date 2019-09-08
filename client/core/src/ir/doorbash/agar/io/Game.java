@@ -286,7 +286,7 @@ public class Game extends ApplicationAdapter {
         Client client = new Client(ENDPOINT);
 
         if (sessionId == null) {
-            client.joinOrCreate("public", GameState.class, this::updateRoom, e -> {
+            client.joinOrCreate("ffa", GameState.class, this::updateRoom, e -> {
                 e.printStackTrace();
                 connectionState = CONNECTION_STATE_DISCONNECTED;
             });
